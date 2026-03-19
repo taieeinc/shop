@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0, viewport-fit=cover">
-    <title>Business Health v10.0 - Production Ready</title>
+    <title>一步一步</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
@@ -534,6 +534,94 @@
             transform: translateY(-2px);
             box-shadow: 0 6px 20px rgba(239, 68, 68, 0.4);
         }
+        .stock-edit-modal {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0, 0, 0, 0.5);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 10000;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s ease;
+        }
+        .stock-edit-modal.show { 
+            opacity: 1;
+            pointer-events: auto;
+        }
+        .stock-edit-modal-content {
+            background: white;
+            border-radius: 24px;
+            padding: 32px;
+            max-width: 500px;
+            width: 90%;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            transform: scale(0.9);
+            transition: transform 0.3s ease;
+        }
+        .stock-edit-modal.show .stock-edit-modal-content { transform: scale(1); }
+        .stock-edit-modal-title {
+            font-size: 20px;
+            font-weight: 800;
+            color: #1e293b;
+            margin-bottom: 24px;
+        }
+        .stock-edit-input-group {
+            margin-bottom: 16px;
+        }
+        .stock-edit-input-group label {
+            display: block;
+            font-size: 12px;
+            font-weight: 600;
+            color: #64748b;
+            margin-bottom: 6px;
+        }
+        .stock-edit-input-group input {
+            width: 100%;
+            padding: 12px 16px;
+            border: 2px solid #e2e8f0;
+            border-radius: 12px;
+            font-size: 14px;
+            font-weight: 500;
+            color: #1e293b;
+            transition: all 0.2s ease;
+        }
+        .stock-edit-input-group input:focus {
+            outline: none;
+            border-color: #3b82f6;
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+        }
+        .stock-edit-buttons {
+            display: flex;
+            gap: 12px;
+            margin-top: 24px;
+        }
+        .stock-edit-buttons button {
+            flex: 1;
+            padding: 14px 24px;
+            border: none;
+            border-radius: 12px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        .stock-edit-buttons .btn-cancel {
+            background: #f1f5f9;
+            color: #64748b;
+        }
+        .stock-edit-buttons .btn-cancel:hover {
+            background: #e2e8f0;
+        }
+        .stock-edit-buttons .btn-save {
+            background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+            color: white;
+        }
+        .stock-edit-buttons .btn-save:hover {
+            transform: scale(1.02);
+            box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+        }
 
         .profit-progress-container {
             width: 100%;
@@ -713,17 +801,18 @@
         <section id="page-stock" class="page-section hidden space-y-8">
             <div class="health-card p-8 bg-white">
                 <h3 class="text-xl font-extrabold mb-6 tracking-tight flex items-center gap-2">📦 货物进项登记</h3>
-                <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
-                    <input id="s-name" type="text" placeholder="商品名称" class="apple-input md:col-span-2">
-                    <input id="s-sn" type="text" placeholder="货号/SKU" class="apple-input">
-                    <div class="flex gap-2">
-                        <input id="s-cost" type="number" placeholder="成本" class="apple-input font-bold">
-                        <input id="s-qty" type="number" value="1" class="apple-input w-24 text-center">
+                <div class="space-y-4">
+                    <div class="grid grid-cols-1 md:grid-cols-10 gap-4">
+                        <input id="s-name" type="text" placeholder="商品名称" class="apple-input md:col-span-5">
+                        <input id="s-cost" type="number" placeholder="成本" class="apple-input font-bold md:col-span-2">
+                        <input id="s-qty" type="number" value="1" class="apple-input text-center md:col-span-1">
+                        <input id="s-total-cost" type="number" placeholder="总成本" class="apple-input font-bold md:col-span-2">
                     </div>
-                    <div class="flex gap-2">
-                        <input id="s-total-cost" type="number" placeholder="总成本" class="apple-input font-bold">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <input id="s-sn" type="text" placeholder="货号/SKU" class="apple-input">
+                        <input id="s-note" type="text" placeholder="备注" class="apple-input">
                     </div>
-                    <button onclick="addStock()" class="apple-btn btn-glow md:col-span-4">添加到在库清单</button>
+                    <button onclick="addStock()" class="apple-btn btn-glow">添加到在库清单</button>
                 </div>
             </div>
             <div class="health-card p-4 bg-white space-y-3">
@@ -790,6 +879,40 @@
         </div>
     </div>
 
+    <div id="stock-edit-modal" class="stock-edit-modal">
+        <div class="stock-edit-modal-content">
+            <h3 class="stock-edit-modal-title">✏️ 编辑库存信息</h3>
+            <div class="stock-edit-input-group">
+                <label>编号</label>
+                <input id="edit-stock-num" type="text" disabled class="bg-slate-50">
+            </div>
+            <div class="stock-edit-input-group">
+                <label>商品名称</label>
+                <input id="edit-stock-name" type="text" placeholder="商品名称">
+            </div>
+            <div class="stock-edit-input-group">
+                <label>货号/SKU</label>
+                <input id="edit-stock-sku" type="text" placeholder="货号/SKU">
+            </div>
+            <div class="stock-edit-input-group">
+                <label>成本</label>
+                <input id="edit-stock-cost" type="number" placeholder="成本">
+            </div>
+            <div class="stock-edit-input-group">
+                <label>数量</label>
+                <input id="edit-stock-qty" type="number" placeholder="数量">
+            </div>
+            <div class="stock-edit-input-group">
+                <label>备注</label>
+                <input id="edit-stock-note" type="text" placeholder="备注">
+            </div>
+            <div class="stock-edit-buttons">
+                <button onclick="hideStockEditModal()" class="btn-cancel">取消</button>
+                <button onclick="saveStockEdit()" class="btn-save">保存修改</button>
+            </div>
+        </div>
+    </div>
+
     <script>
         /**
          * Business Health Management System
@@ -817,6 +940,9 @@
         // Filtered data arrays
         let filteredStocks = [];
         let filteredOrders = [];
+        
+        // Current editing stock index
+        let editingStockIndex = -1;
 
         /**
          * Switch between different pages
@@ -851,6 +977,7 @@
                 const quantity = parseInt(document.getElementById('s-qty').value);
                 let cost = parseFloat(document.getElementById('s-cost').value);
                 const totalCost = parseFloat(document.getElementById('s-total-cost').value);
+                const note = document.getElementById('s-note').value.trim();
 
                 // Input validation
                 if (!name) {
@@ -881,14 +1008,15 @@
                     n: name,
                     sn: sku || 'SKU',
                     c: cost || 0,
-                    q: quantity || 1
+                    q: quantity || 1,
+                    note: note || ''
                 };
 
                 db.stocks.unshift(newStock);
                 saveAndRender();
 
                 // Clear form fields
-                ['s-name', 's-sn', 's-cost', 's-total-cost'].forEach(id => {
+                ['s-name', 's-sn', 's-cost', 's-total-cost', 's-note'].forEach(id => {
                     document.getElementById(id).value = '';
                 });
                 // Reset input states
@@ -1059,7 +1187,7 @@
                 const stockSelect = document.getElementById('o-stock-sel');
                 stockSelect.innerHTML = '<option value="">从库选品 (自动同步进价)</option>' + 
                     db.stocks.filter(s => s.q > 0)
-                        .map(s => `<option value="${s.id}">${s.n} [${s.sn}] (余${s.q})</option>`)
+                        .map(s => `<option value="${s.id}">#${s.num} ${s.n} (余${s.q})</option>`)
                         .join('');
                 
                 // Reset filters
@@ -1083,22 +1211,28 @@
                 document.getElementById('stock-list').innerHTML = filteredStocks.map((stock, index) => {
                     const isInStock = stock.q > 0;
                     return `
-                        <div class="health-card p-5 flex justify-between items-center group ${isInStock ? 'in-stock' : 'sold-out'}">
-                            <div class="min-w-0">
-                                <div class="flex items-center gap-2 mb-1">
-                                    <span class="item-number">#${stock.num || '------'}</span>
+                        <div class="health-card p-5 group ${isInStock ? 'in-stock' : 'sold-out'}">
+                            <div class="flex justify-between items-start mb-3">
+                                <div class="flex items-center gap-2">
+                                    <span class="text-lg font-black text-blue-600 font-mono tracking-tight">#${stock.num || '------'}</span>
                                     <span class="text-[9px] px-1.5 py-0.5 rounded font-black ${isInStock ? 'bg-blue-500 text-white shadow-lg shadow-blue-500/30' : 'bg-slate-200 text-slate-500'}">
                                         ${isInStock ? '在售' : '罄'}
                                     </span>
-                                    <span class="text-[10px] font-mono text-slate-400 font-bold tracking-tight">${stock.sn}</span>
                                 </div>
-                                <h4 class="item-title truncate block">${stock.n}</h4>
-                                <p class="text-[10px] text-slate-400 font-medium mt-0.5">成本 ¥${stock.c}</p>
+                                <div class="flex gap-2">
+                                    <button onclick="editStock(${index})" class="text-[10px] text-blue-400 opacity-0 group-hover:opacity-100 transition">修改</button>
+                                    <button onclick="deleteStock(${index})" class="text-[10px] text-red-400 opacity-0 group-hover:opacity-100 transition">移除</button>
+                                </div>
                             </div>
-                            <div class="text-right ml-4">
-                                <p class="text-3xl font-black text-slate-900 font-mono tracking-tight">${stock.q}</p>
-                                <button onclick="deleteStock(${index})" class="text-[10px] text-red-400 opacity-0 group-hover:opacity-100 transition">移除</button>
+                            <h4 class="item-title truncate block mb-2">${stock.n}</h4>
+                            <div class="flex justify-between items-center text-sm">
+                                <div class="flex gap-4">
+                                    <span class="text-slate-500">货号: <span class="font-mono">${stock.sn}</span></span>
+                                    <span class="text-slate-500">成本: <span class="font-bold">¥${stock.c}</span></span>
+                                </div>
+                                <span class="text-slate-500">数量: <span class="font-bold text-base">${stock.q}</span></span>
                             </div>
+                            ${stock.note ? `<p class="text-xs text-slate-400 mt-2 pt-2 border-t border-slate-100">备注: ${stock.note}</p>` : ''}
                         </div>`;
                 }).join('');
             } catch (error) {
@@ -1195,6 +1329,89 @@
             } catch (error) {
                 console.error('Delete stock error:', error);
                 alert('删除库存失败');
+            }
+        }
+
+        /**
+         * Show stock edit modal with current data
+         * @param {number} index - Index in filtered array
+         */
+        function editStock(index) {
+            try {
+                const stock = filteredStocks[index];
+                if (!stock) return;
+
+                editingStockIndex = index;
+
+                document.getElementById('edit-stock-num').value = stock.num || '';
+                document.getElementById('edit-stock-name').value = stock.n || '';
+                document.getElementById('edit-stock-sku').value = stock.sn || '';
+                document.getElementById('edit-stock-cost').value = stock.c || '';
+                document.getElementById('edit-stock-qty').value = stock.q || '';
+                document.getElementById('edit-stock-note').value = stock.note || '';
+
+                const modal = document.getElementById('stock-edit-modal');
+                modal.classList.add('show');
+            } catch (error) {
+                console.error('Show stock edit modal error:', error);
+            }
+        }
+
+        /**
+         * Hide stock edit modal
+         */
+        function hideStockEditModal() {
+            try {
+                document.getElementById('stock-edit-modal').classList.remove('show');
+                editingStockIndex = -1;
+            } catch (error) {
+                console.error('Hide stock edit modal error:', error);
+            }
+        }
+
+        /**
+         * Save stock edit changes
+         */
+        function saveStockEdit() {
+            try {
+                if (editingStockIndex === -1) return;
+
+                const stock = filteredStocks[editingStockIndex];
+                if (!stock) return;
+
+                const name = document.getElementById('edit-stock-name').value.trim();
+                const sku = document.getElementById('edit-stock-sku').value.trim();
+                const cost = parseFloat(document.getElementById('edit-stock-cost').value);
+                const qty = parseInt(document.getElementById('edit-stock-qty').value);
+                const note = document.getElementById('edit-stock-note').value.trim();
+
+                if (!name) {
+                    alert('请输入商品名称');
+                    return;
+                }
+                if (isNaN(cost) || cost < 0) {
+                    alert('请输入有效的成本金额');
+                    return;
+                }
+                if (isNaN(qty) || qty < 0) {
+                    alert('请输入有效的数量');
+                    return;
+                }
+
+                const realIndex = db.stocks.findIndex(s => s.id === stock.id);
+                if (realIndex !== -1) {
+                    db.stocks[realIndex].n = name;
+                    db.stocks[realIndex].sn = sku || 'SKU';
+                    db.stocks[realIndex].c = cost || 0;
+                    db.stocks[realIndex].q = qty || 0;
+                    db.stocks[realIndex].note = note || '';
+
+                    saveAndRender();
+                    hideStockEditModal();
+                }
+            } catch (error) {
+                console.error('Save stock edit error:', error);
+                alert('保存库存修改失败');
             }
         }
 
