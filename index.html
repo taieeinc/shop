@@ -126,6 +126,11 @@
             outline: none;
             transform: scale(1.01);
         }
+        .apple-input:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            background: linear-gradient(145deg, #E5E5EA 0%, #D1D1D6 100%);
+        }
         select.apple-input {
             appearance: none;
             background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%238E8E93' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
@@ -715,6 +720,9 @@
                         <input id="s-cost" type="number" placeholder="成本" class="apple-input font-bold">
                         <input id="s-qty" type="number" value="1" class="apple-input w-24 text-center">
                     </div>
+                    <div class="flex gap-2">
+                        <input id="s-total-cost" type="number" placeholder="总成本" class="apple-input font-bold">
+                    </div>
                     <button onclick="addStock()" class="apple-btn btn-glow md:col-span-4">添加到在库清单</button>
                 </div>
             </div>
@@ -741,7 +749,7 @@
                     <input id="o-price" type="number" placeholder="售价" class="apple-input font-black text-blue-600">
                     <div class="flex gap-2">
                         <select id="o-ch" class="apple-input flex-1">
-                            <option>闲鱼</option><option>拼多多</option><option>淘宝</option><option>私域</option>
+                            <option>闲鱼</option><option>拼多多</option><option>淘宝</option><option>私域</option><option>得物</option>
                         </select>
                         <input id="o-qty" type="number" value="1" class="apple-input w-24 text-center">
                     </div>
@@ -840,20 +848,25 @@
             try {
                 const name = document.getElementById('s-name').value.trim();
                 const sku = document.getElementById('s-sn').value.trim();
-                const cost = parseFloat(document.getElementById('s-cost').value);
                 const quantity = parseInt(document.getElementById('s-qty').value);
+                let cost = parseFloat(document.getElementById('s-cost').value);
+                const totalCost = parseFloat(document.getElementById('s-total-cost').value);
 
                 // Input validation
                 if (!name) {
                     alert('请输入商品名称');
                     return;
                 }
-                if (isNaN(cost) || cost < 0) {
-                    alert('请输入有效的成本金额');
-                    return;
-                }
                 if (isNaN(quantity) || quantity < 1) {
                     alert('请输入有效的数量（至少1）');
+                    return;
+                }
+                
+                // Calculate cost from total cost if provided
+                if (!isNaN(totalCost) && totalCost > 0) {
+                    cost = totalCost / quantity;
+                } else if (isNaN(cost) || cost < 0) {
+                    alert('请输入有效的成本金额或总成本');
                     return;
                 }
 
@@ -875,9 +888,12 @@
                 saveAndRender();
 
                 // Clear form fields
-                ['s-name', 's-sn', 's-cost'].forEach(id => {
+                ['s-name', 's-sn', 's-cost', 's-total-cost'].forEach(id => {
                     document.getElementById(id).value = '';
                 });
+                // Reset input states
+                document.getElementById('s-cost').disabled = false;
+                document.getElementById('s-total-cost').disabled = true;
 
             } catch (error) {
                 console.error('Add stock error:', error);
@@ -1412,7 +1428,7 @@
                         labels: Object.keys(channelData),
                         datasets: [{
                             data: Object.values(channelData),
-                            backgroundColor: ['#007AFF', '#34C759', '#FF9500', '#AF52DE'],
+                            backgroundColor: ['#007AFF', '#34C759', '#FF9500', '#AF52DE', '#FF2D55'],
                             borderWidth: 0
                         }]
                     },
@@ -1495,11 +1511,80 @@
             try {
                 saveAndRender();
                 switchPage('overview');
+                
+                // Initialize cost input interactions after DOM is ready
+                setTimeout(initializeCostInputs, 100);
             } catch (error) {
                 console.error('Initialization error:', error);
                 alert('应用初始化失败，请刷新页面');
             }
         };
+        
+        /**
+         * Initialize cost and total cost input interactions
+         * Handles mutual exclusion and auto-calculation
+         */
+        function initializeCostInputs() {
+            try {
+                const costInput = document.getElementById('s-cost');
+                const totalCostInput = document.getElementById('s-total-cost');
+                const qtyInput = document.getElementById('s-qty');
+                
+                if (!costInput || !totalCostInput || !qtyInput) {
+                    console.warn('Cost input elements not found, retrying...');
+                    setTimeout(initializeCostInputs, 200);
+                    return;
+                }
+                
+                // Set initial states - both inputs enabled
+                totalCostInput.disabled = false;
+                
+                // Remove existing event listeners to prevent duplicates
+                const newCostInput = costInput.cloneNode(true);
+                costInput.parentNode.replaceChild(newCostInput, costInput);
+                
+                const newTotalCostInput = totalCostInput.cloneNode(true);
+                totalCostInput.parentNode.replaceChild(newTotalCostInput, totalCostInput);
+                
+                const newQtyInput = qtyInput.cloneNode(true);
+                qtyInput.parentNode.replaceChild(newQtyInput, qtyInput);
+                
+                // Cost input change handler
+                newCostInput.addEventListener('input', function() {
+                    if (this.value && this.value.trim() !== '') {
+                        newTotalCostInput.disabled = true;
+                        newTotalCostInput.value = '';
+                    } else {
+                        newTotalCostInput.disabled = false;
+                    }
+                });
+                
+                // Total cost input change handler
+                newTotalCostInput.addEventListener('input', function() {
+                    if (this.value && this.value.trim() !== '') {
+                        newCostInput.disabled = true;
+                        newCostInput.value = '';
+                    } else {
+                        newCostInput.disabled = false;
+                    }
+                });
+                
+                // Quantity change handler - recalculate cost if total cost is provided
+                newQtyInput.addEventListener('input', function() {
+                    if (newTotalCostInput.value && newTotalCostInput.value.trim() !== '') {
+                        const totalCost = parseFloat(newTotalCostInput.value);
+                        const qty = parseInt(this.value) || 1;
+                        if (!isNaN(totalCost) && qty > 0) {
+                            newCostInput.value = (totalCost / qty).toFixed(2);
+                        }
+                    }
+                });
+                
+                console.log('Cost input interactions initialized successfully');
+            } catch (error) {
+                console.error('Initialize cost inputs error:', error);
+            }
+        }
     </script>
 </body>
 </html>
