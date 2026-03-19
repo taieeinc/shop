@@ -1434,6 +1434,23 @@
             });
             db.orders = migratedOrders;
             
+            // Migrate stock SKU data: remove default 'SKU' values
+            if (db.stocks && db.stocks.length > 0) {
+                const invalidSkuValues = ['SKU', 'sku', 'null', 'undefined', 'NULL', 'UNDEFINED'];
+                let migratedCount = 0;
+                
+                db.stocks.forEach(stock => {
+                    if (stock.sn && invalidSkuValues.includes(stock.sn.trim())) {
+                        stock.sn = '';
+                        migratedCount++;
+                    }
+                });
+                
+                if (migratedCount > 0) {
+                    console.log(`Migrated ${migratedCount} stocks: removed default SKU values`);
+                }
+            }
+            
         } catch (error) {
             console.error('Database initialization error:', error);
             db = { orders: [], stocks: [], stockCounter: 0, orderCounter: 0 };
@@ -1987,7 +2004,7 @@
                     id: Date.now(),
                     num: stockNumber,
                     n: name,
-                    sn: sku || 'SKU',
+                    sn: sku || '',
                     c: cost || 0,
                     q: quantity || 1,
                     note: note || ''
@@ -2231,7 +2248,7 @@
                             <h4 class="item-title truncate block mb-2">${escapeHtml(stock.n)}</h4>
                             <div class="flex justify-between items-center text-sm">
                                 <div class="flex gap-4">
-                                    <span class="text-slate-500">货号: <span class="font-mono">${escapeHtml(stock.sn)}</span></span>
+                                    ${getStockDisplaySku(stock) ? `<span class="text-slate-500">货号: <span class="font-mono">${escapeHtml(getStockDisplaySku(stock))}</span></span>` : ''}
                                     <span class="text-slate-500">成本: <span class="font-bold">${formatCurrency(stock.c)}</span></span>
                                 </div>
                                 <span class="text-slate-500">数量: <span class="font-bold text-base">${stock.q}</span></span>
@@ -2241,6 +2258,64 @@
                 }).join('');
             } catch (error) {
                 console.error('Render stock list error:', error);
+            }
+        }
+
+        /**
+         * Get display SKU/sn value for stock
+         * Returns empty string if SKU is empty, null, or default values
+         * @param {Object} stock - The stock object
+         * @returns {string} The SKU to display (empty if none)
+         */
+        function getStockDisplaySku(stock) {
+            try {
+                if (!stock || !stock.sn) {
+                    return '';
+                }
+                
+                // Filter out default/invalid values
+                const invalidValues = ['SKU', 'sku', 'null', 'undefined', 'NULL', 'UNDEFINED'];
+                if (invalidValues.includes(stock.sn.trim())) {
+                    return '';
+                }
+                
+                return stock.sn.trim();
+            } catch (error) {
+                console.error('Get stock display SKU error:', error);
+                return '';
+            }
+        }
+
+        /**
+         * Get display number for an order
+         * Returns only base number if the stock has only 1 order, otherwise returns full number
+         * @param {Object} order - The order object
+         * @returns {string} The number to display
+         */
+        function getOrderDisplayNumber(order) {
+            try {
+                if (!order || !order.num) {
+                    return '------';
+                }
+                
+                // If no stockId, always show full number
+                if (!order.stockId) {
+                    return order.num;
+                }
+                
+                // Count orders for this stock
+                const stockOrders = db.orders.filter(o => o.stockId === order.stockId && !o.refunded);
+                
+                // If only 1 order for this stock, show only base number
+                if (stockOrders.length === 1) {
+                    return order.baseNum || order.num.split('-')[0];
+                }
+                
+                // Otherwise show full number
+                return order.num;
+            } catch (error) {
+                console.error('Get order display number error:', error);
+                return order.num || '------';
             }
         }
 
@@ -2317,7 +2392,7 @@
                                                 <div class="min-w-0 flex-1">
                                                     <div class="flex items-center gap-2 mb-1">
                                                         ${isRefunded ? '<span class="refund-badge">已退款</span>' : ''}
-                                                        <span class="item-number text-sm">#${escapeHtml(order.num || '------')}</span>
+                                                        <span class="item-number text-sm">#${escapeHtml(getOrderDisplayNumber(order))}</span>
                                                         <span class="text-[9px] bg-slate-100 px-2 py-0.5 rounded text-slate-500 font-bold">${escapeHtml(order.ch)}</span>
                                                         <p class="item-title truncate text-slate-900 text-sm">${escapeHtml(order.n || '未备注')}</p>
                                                     </div>
@@ -2352,7 +2427,7 @@
                                 <div class="min-w-0 flex-1">
                                     <div class="flex items-center gap-2 mb-1">
                                         ${isRefunded ? '<span class="refund-badge">已退款</span>' : ''}
-                                        <span class="item-number">#${escapeHtml(order.num || '------')}</span>
+                                        <span class="item-number">#${escapeHtml(getOrderDisplayNumber(order))}</span>
                                         <span class="text-[9px] bg-slate-100 px-2 py-0.5 rounded text-slate-500 font-bold">${escapeHtml(order.ch)}</span>
                                         <p class="item-title truncate text-slate-900">${escapeHtml(order.n || '未备注')}</p>
                                     </div>
@@ -2477,7 +2552,7 @@
                 const realIndex = db.stocks.findIndex(s => s.id === stock.id);
                 if (realIndex !== -1) {
                     db.stocks[realIndex].n = name;
-                    db.stocks[realIndex].sn = sku || 'SKU';
+                    db.stocks[realIndex].sn = sku || '';
                     db.stocks[realIndex].c = cost || 0;
                     db.stocks[realIndex].q = qty || 0;
                     db.stocks[realIndex].note = note || '';
@@ -3076,6 +3151,67 @@
         }
 
         /**
+         * Test SKU display logic
+         * Validates that SKU display function handles various edge cases correctly
+         * @returns {Object} Test results
+         */
+        function testSkuDisplay() {
+            console.log('Testing SKU display logic...');
+            
+            const testCases = [
+                { stock: { sn: 'ABC123' }, expected: 'ABC123', description: 'Valid SKU' },
+                { stock: { sn: '' }, expected: '', description: 'Empty string SKU' },
+                { stock: { sn: null }, expected: '', description: 'Null SKU' },
+                { stock: { sn: undefined }, expected: '', description: 'Undefined SKU' },
+                { stock: { sn: 'SKU' }, expected: '', description: 'Default SKU value' },
+                { stock: { sn: 'sku' }, expected: '', description: 'Lowercase SKU' },
+                { stock: { sn: 'null' }, expected: '', description: 'String null' },
+                { stock: { sn: 'NULL' }, expected: '', description: 'Uppercase NULL' },
+                { stock: { sn: '  SKU  ' }, expected: '', description: 'SKU with whitespace' },
+                { stock: { sn: 'MY-SKU-001' }, expected: 'MY-SKU-001', description: 'SKU with hyphens' },
+                { stock: { sn: '12345' }, expected: '12345', description: 'Numeric SKU' },
+                { stock: null, expected: '', description: 'Null stock object' },
+                { stock: {}, expected: '', description: 'Empty stock object' }
+            ];
+            
+            const results = [];
+            let passed = 0;
+            let failed = 0;
+            
+            testCases.forEach((testCase, index) => {
+                const result = getStockDisplaySku(testCase.stock);
+                const success = result === testCase.expected;
+                
+                if (success) {
+                    passed++;
+                } else {
+                    failed++;
+                }
+                
+                results.push({
+                    test: index + 1,
+                    description: testCase.description,
+                    input: testCase.stock ? testCase.stock.sn : 'null stock',
+                    expected: testCase.expected,
+                    actual: result,
+                    success
+                });
+            });
+            
+            console.log('SKU Display Test Results:');
+            console.table(results);
+            console.log(`Passed: ${passed}/${testCases.length}, Failed: ${failed}/${testCases.length}`);
+            
+            return {
+                success: failed === 0,
+                total: testCases.length,
+                passed,
+                failed,
+                results
+            };
+        }
+
+        /**
          * Show refund modal with order details
          * @param {number} index - Index in filtered array
          */
@@ -3392,6 +3528,9 @@
                 window.testDeleteOrderWithStock = (orderIndex) => testDeleteOrderWithStock(orderIndex);
                 window.testDeleteOrderTransaction = () => testDeleteOrderTransaction();
                 
+                // Expose SKU display testing function
+                window.testSkuDisplay = () => testSkuDisplay();
+                
                 console.log('System testing functions available:');
                 console.log('  - runSystemTests(): Run all system tests');
                 console.log('  - testConcurrency(count): Test number generation uniqueness');
@@ -3405,6 +3544,8 @@
                 console.log('Order deletion testing functions available:');
                 console.log('  - testDeleteOrderWithStock(orderIndex): Test delete with stock restoration');
                 console.log('  - testDeleteOrderTransaction(): Test transaction rollback');
+                console.log('SKU display testing functions available:');
+                console.log('  - testSkuDisplay(): Test SKU display logic');
                 
                 // Initialize cost input interactions after DOM is ready
                 setTimeout(initializeCostInputs, 100);
