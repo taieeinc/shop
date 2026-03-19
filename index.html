@@ -1,0 +1,1505 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0, viewport-fit=cover">
+    <title>Business Health v10.0 - Production Ready</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --apple-blue: #007AFF;
+            --health-bg: #F2F2F7;
+            --apple-card: #FFFFFF;
+            --apple-text: #1C1C1E;
+            --apple-secondary: #8E8E93;
+            --glass-bg: rgba(255, 255, 255, 0.7);
+            --glass-border: rgba(255, 255, 255, 0.3);
+            --shadow-soft: 0 4px 20px rgba(0, 0, 0, 0.08);
+            --shadow-medium: 0 8px 30px rgba(0, 0, 0, 0.12);
+            --shadow-strong: 0 20px 60px rgba(0, 0, 0, 0.15);
+        }
+
+        * { font-family: 'Inter', -apple-system, sans-serif !important; }
+
+        body {
+            background-color: var(--health-bg);
+            background-image: radial-gradient(at 0% 0%, rgba(0, 122, 255, 0.05) 0px, transparent 50%),
+                              radial-gradient(at 100% 0%, rgba(0, 122, 255, 0.05) 0px, transparent 50%),
+                              radial-gradient(at 100% 100%, rgba(0, 122, 255, 0.05) 0px, transparent 50%),
+                              radial-gradient(at 0% 100%, rgba(0, 122, 255, 0.05) 0px, transparent 50%);
+            background-attachment: fixed;
+            color: var(--apple-text);
+            -webkit-font-smoothing: antialiased;
+            min-height: 100vh;
+            margin: 0; padding: 0;
+        }
+
+        .apple-nav {
+            position: sticky; top: 0; z-index: 9999;
+            background: var(--glass-bg);
+            backdrop-filter: saturate(180%) blur(20px);
+            -webkit-backdrop-filter: saturate(180%) blur(20px);
+            border-bottom: 1px solid var(--glass-border);
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+        }
+
+        .nav-link {
+            padding: 10px 20px;
+            color: var(--apple-text);
+            font-weight: 700; font-size: 15px;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            cursor: pointer !important;
+            border-radius: 20px;
+            border: none; background: none;
+            opacity: 0.6;
+            position: relative;
+            overflow: hidden;
+        }
+        .nav-link::before {
+            content: '';
+            position: absolute;
+            top: 50%; left: 50%;
+            width: 0; height: 0;
+            border-radius: 50%;
+            background: rgba(0, 122, 255, 0.1);
+            transform: translate(-50%, -50%);
+            transition: width 0.3s ease, height 0.3s ease;
+        }
+        .nav-link:hover::before { width: 150%; height: 150%; }
+        .nav-link.active {
+            opacity: 1;
+            background: linear-gradient(135deg, rgba(0, 122, 255, 0.1), rgba(0, 122, 255, 0.05));
+            box-shadow: 0 2px 10px rgba(0, 122, 255, 0.15);
+        }
+        .nav-link:active { transform: scale(0.95); }
+
+        .health-card {
+            background: linear-gradient(145deg, #ffffff 0%, #fafbfc 100%);
+            border-radius: 24px;
+            border: 1px solid rgba(0, 0, 0, 0.03);
+            box-shadow: var(--shadow-soft);
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+            overflow: hidden;
+        }
+        .health-card::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0;
+            height: 3px;
+            background: linear-gradient(90deg, #007AFF, #00C6FF, #007AFF);
+            background-size: 200% 100%;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+        .health-card:hover {
+            transform: translateY(-4px) scale(1.01);
+            box-shadow: var(--shadow-medium);
+        }
+        .health-card:hover::before {
+            opacity: 1;
+            animation: gradient-flow 2s ease infinite;
+        }
+        @keyframes gradient-flow {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+
+        .apple-input {
+            background: linear-gradient(145deg, #F2F2F7 0%, #E8E8ED 100%);
+            border: 1px solid transparent;
+            border-radius: 14px;
+            color: var(--apple-text);
+            font-size: 16px; padding: 14px 18px;
+            width: 100%; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            min-width: 0;
+            text-overflow: ellipsis;
+            box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.02);
+        }
+        .apple-input:focus {
+            background: linear-gradient(145deg, #FFFFFF 0%, #F8F9FA 100%);
+            border-color: rgba(0, 122, 255, 0.3);
+            box-shadow: 0 0 0 4px rgba(0, 122, 255, 0.1), inset 0 2px 4px rgba(0, 0, 0, 0.01);
+            outline: none;
+            transform: scale(1.01);
+        }
+        select.apple-input {
+            appearance: none;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%238E8E93' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 14px center;
+            background-size: 16px;
+            padding-right: 40px;
+            background-color: #FFFFFF;
+            border: 2px solid #E5E7EB;
+        }
+        select.apple-input:focus {
+            background-color: #FFFFFF;
+            border-color: #007AFF;
+        }
+
+        .apple-btn {
+            background: linear-gradient(135deg, #007AFF 0%, #0056B3 100%);
+            color: white; border-radius: 14px;
+            font-weight: 700; padding: 16px;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            border: none;
+            box-shadow: 0 4px 15px rgba(0, 122, 255, 0.3);
+            position: relative;
+            overflow: hidden;
+        }
+        .apple-btn::before {
+            content: '';
+            position: absolute;
+            top: 0; left: -100%;
+            width: 100%; height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent);
+            transition: left 0.5s ease;
+        }
+        .apple-btn:hover::before { left: 100%; }
+        .apple-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(0, 122, 255, 0.4);
+        }
+        .apple-btn:active { transform: scale(0.97); opacity: 0.9; }
+
+        .stat-value { font-size: 36px; font-weight: 800; letter-spacing: -0.04em; color: var(--apple-text); font-variant-numeric: tabular-nums; }
+        .stat-label { font-size: 11px; font-weight: 700; color: var(--apple-secondary); text-transform: uppercase; letter-spacing: 0.1em; }
+        .item-title { font-size: 16px; font-weight: 700; color: var(--apple-text); letter-spacing: -0.01em; }
+        .item-subtitle { font-size: 11px; font-weight: 600; color: var(--apple-secondary); font-variant-numeric: tabular-nums; }
+
+        .profit-hero {
+            background: linear-gradient(135deg, #007AFF 0%, #0056B3 50%, #004494 100%);
+            border-radius: 32px;
+            padding: 40px 24px;
+            position: relative;
+            overflow: hidden;
+            box-shadow: 0 20px 60px rgba(0, 122, 255, 0.35), inset 0 1px 0 rgba(255,255,255,0.2);
+        }
+        .profit-hero::before {
+            content: '';
+            position: absolute;
+            top: -50%; right: -50%;
+            width: 200%; height: 200%;
+            background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, transparent 60%);
+            animation: shimmer 4s ease-in-out infinite;
+        }
+        .profit-hero::after {
+            content: '';
+            position: absolute;
+            bottom: 0; left: 0; right: 0;
+            height: 60%;
+            background: linear-gradient(to top, rgba(0,0,0,0.1), transparent);
+            pointer-events: none;
+        }
+        @keyframes shimmer {
+            0%, 100% { transform: translate(0, 0) rotate(0deg); }
+            50% { transform: translate(-30px, 30px) rotate(5deg); }
+        }
+        .profit-hero-content { position: relative; z-index: 1; }
+        .profit-hero h2 {
+            color: white;
+            text-shadow: 0 4px 30px rgba(0,0,0,0.3);
+            background: linear-gradient(135deg, #ffffff 0%, #dbeafe 50%, #ffffff 100%);
+            background-size: 200% auto;
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            word-break: break-all;
+            line-height: 1.1;
+            animation: text-shimmer 3s ease-in-out infinite;
+        }
+        @keyframes text-shimmer {
+            0%, 100% { background-position: 0% center; }
+            50% { background-position: 100% center; }
+        }
+        .profit-hero .stat-label {
+            color: rgba(255,255,255,0.95);
+            text-shadow: 0 2px 10px rgba(0,0,0,0.2);
+            letter-spacing: 0.15em;
+        }
+
+        .stat-card {
+            background: linear-gradient(145deg, #ffffff 0%, #f8fafc 100%);
+            position: relative;
+            overflow: hidden;
+        }
+        .stat-card::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: radial-gradient(circle at top right, rgba(0,122,255,0.03), transparent 60%);
+            pointer-events: none;
+        }
+        .stat-card::after {
+            content: '';
+            position: absolute;
+            bottom: -20px; right: -20px;
+            width: 100px; height: 100px;
+            background: linear-gradient(135deg, transparent 0%, rgba(0,122,255,0.08) 100%);
+            border-radius: 50%;
+            transition: transform 0.3s ease;
+        }
+        .stat-card:hover::after { transform: scale(1.2); }
+        .stat-card.highlight {
+            background: linear-gradient(145deg, #dbeafe 0%, #bfdbfe 100%);
+            border: 2px solid rgba(0,122,255,0.3);
+            box-shadow: 0 4px 20px rgba(0, 122, 255, 0.15);
+        }
+        .stat-card.highlight::after {
+            background: linear-gradient(135deg, transparent 0%, rgba(0,122,255,0.2) 100%);
+        }
+        .stat-icon {
+            font-size: 28px;
+            margin-bottom: 12px;
+            filter: drop-shadow(0 2px 8px rgba(0,0,0,0.15));
+            animation: float 3s ease-in-out infinite;
+        }
+        @keyframes float {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-5px); }
+        }
+
+        .chart-card {
+            background: linear-gradient(145deg, #ffffff 0%, #f8fafc 100%);
+            border: 1px solid rgba(0,0,0,0.05);
+            position: relative;
+            overflow: hidden;
+        }
+        .chart-card::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0;
+            height: 1px;
+            background: linear-gradient(90deg, transparent, rgba(0,122,255,0.3), transparent);
+        }
+        .chart-title {
+            font-size: 14px;
+            font-weight: 700;
+            color: var(--apple-secondary);
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            position: relative;
+        }
+        .chart-title::before {
+            content: '';
+            width: 4px; height: 16px;
+            background: linear-gradient(180deg, #007AFF, #0056B3);
+            border-radius: 2px;
+            box-shadow: 0 0 10px rgba(0, 122, 255, 0.3);
+        }
+
+        @media (max-width: 640px) {
+            .stat-value { font-size: 28px; }
+            .apple-input { font-size: 15px; padding: 12px 14px; }
+            .profit-hero { padding: 32px 16px; }
+            .profit-hero h2 { font-size: 2.5rem; }
+            .stat-icon { font-size: 24px; }
+        }
+
+        .bg-decoration {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            pointer-events: none;
+            z-index: -1;
+            overflow: hidden;
+        }
+        .bg-decoration::before {
+            content: '';
+            position: absolute;
+            top: 10%; left: 10%;
+            width: 300px; height: 300px;
+            background: radial-gradient(circle, rgba(0, 122, 255, 0.03) 0%, transparent 70%);
+            border-radius: 50%;
+            animation: float-bg 20s ease-in-out infinite;
+        }
+        .bg-decoration::after {
+            content: '';
+            position: absolute;
+            bottom: 10%; right: 10%;
+            width: 400px; height: 400px;
+            background: radial-gradient(circle, rgba(0, 122, 255, 0.02) 0%, transparent 70%);
+            border-radius: 50%;
+            animation: float-bg 25s ease-in-out infinite reverse;
+        }
+        @keyframes float-bg {
+            0%, 100% { transform: translate(0, 0); }
+            50% { transform: translate(30px, -30px); }
+        }
+
+        .page-section { animation: fade-in 0.4s ease-out; }
+        @keyframes fade-in {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .btn-glow {
+            position: relative;
+        }
+        .btn-glow::after {
+            content: '';
+            position: absolute;
+            top: -2px; left: -2px; right: -2px; bottom: -2px;
+            background: linear-gradient(45deg, #007AFF, #00C6FF, #007AFF);
+            border-radius: 16px;
+            z-index: -1;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+            filter: blur(8px);
+        }
+        .btn-glow:hover::after { opacity: 0.5; }
+
+        .search-box {
+            background: linear-gradient(145deg, #F2F2F7 0%, #E8E8ED 100%);
+            border: 1px solid transparent;
+            border-radius: 14px;
+            color: var(--apple-text);
+            font-size: 14px; padding: 12px 16px;
+            width: 100%; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.02);
+        }
+        .search-box:focus {
+            background: linear-gradient(145deg, #FFFFFF 0%, #F8F9FA 100%);
+            border-color: rgba(0, 122, 255, 0.3);
+            box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.1), inset 0 2px 4px rgba(0, 0, 0, 0.01);
+            outline: none;
+        }
+        .search-box::placeholder { color: var(--apple-secondary); }
+
+        .item-number {
+            font-size: 10px;
+            font-weight: 700;
+            color: var(--apple-secondary);
+            background: linear-gradient(145deg, #f1f5f9 0%, #e2e8f0 100%);
+            padding: 2px 6px;
+            border-radius: 6px;
+            font-variant-numeric: tabular-nums;
+            letter-spacing: 0.05em;
+        }
+
+        .stock-card.sold-out {
+            opacity: 0.6;
+            background: linear-gradient(145deg, #f8fafc 0%, #f1f5f9 100%);
+            border: 1px solid rgba(148, 163, 184, 0.2);
+            filter: grayscale(30%);
+        }
+        .stock-card.sold-out:hover {
+            opacity: 0.8;
+            transform: translateY(-2px);
+        }
+        .stock-card.sold-out .item-title {
+            color: var(--apple-secondary);
+        }
+        .stock-card.sold-out .stat-value {
+            color: var(--apple-secondary);
+        }
+        .stock-card.in-stock {
+            border: 2px solid rgba(0, 122, 255, 0.3);
+            box-shadow: 0 6px 24px rgba(0, 122, 255, 0.15);
+            background: linear-gradient(145deg, #ffffff 0%, #f0f9ff 100%);
+        }
+        .stock-card.in-stock:hover {
+            border-color: rgba(0, 122, 255, 0.5);
+            box-shadow: 0 10px 40px rgba(0, 122, 255, 0.25);
+            transform: translateY(-4px) scale(1.02);
+        }
+
+        .order-card.refunded {
+            opacity: 0.5;
+            background: linear-gradient(145deg, #fef2f2 0%, #fee2e2 100%);
+            border: 1px solid rgba(239, 68, 68, 0.2);
+        }
+        .order-card.refunded .profit-display {
+            text-decoration: line-through;
+            color: var(--apple-secondary);
+        }
+
+        .refund-badge {
+            font-size: 9px;
+            font-weight: 700;
+            background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+            color: white;
+            padding: 2px 8px;
+            border-radius: 6px;
+            letter-spacing: 0.05em;
+        }
+
+        .btn-refund {
+            background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+            color: white;
+            border-radius: 10px;
+            font-weight: 700;
+            padding: 6px 12px;
+            font-size: 11px;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            border: none;
+            box-shadow: 0 2px 8px rgba(239, 68, 68, 0.2);
+        }
+        .btn-refund:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);
+        }
+        .btn-refund:active { transform: scale(0.97); }
+
+        .refund-modal {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0, 0, 0, 0.5);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 10000;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s ease;
+        }
+        .refund-modal.show { 
+            opacity: 1;
+            pointer-events: auto;
+        }
+        .refund-modal-content {
+            background: white;
+            border-radius: 24px;
+            padding: 32px;
+            max-width: 400px;
+            width: 90%;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            transform: scale(0.9);
+            transition: transform 0.3s ease;
+        }
+        .refund-modal.show .refund-modal-content { transform: scale(1); }
+        .refund-modal-title {
+            font-size: 20px;
+            font-weight: 800;
+            color: var(--apple-text);
+            margin-bottom: 24px;
+            text-align: center;
+        }
+        .refund-input-group { margin-bottom: 16px; }
+        .refund-input-group label {
+            display: block;
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--apple-secondary);
+            margin-bottom: 8px;
+        }
+        .refund-input-group input {
+            width: 100%;
+            padding: 12px 16px;
+            border: 1px solid #e5e7eb;
+            border-radius: 12px;
+            font-size: 16px;
+            transition: all 0.3s ease;
+        }
+        .refund-input-group input:focus {
+            border-color: #007AFF;
+            box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.1);
+            outline: none;
+        }
+        .refund-modal-buttons {
+            display: flex;
+            gap: 12px;
+            margin-top: 24px;
+        }
+        .refund-modal-buttons button {
+            flex: 1;
+            padding: 14px;
+            border-radius: 12px;
+            font-weight: 700;
+            font-size: 15px;
+            transition: all 0.3s ease;
+        }
+        .refund-modal-buttons .btn-cancel {
+            background: linear-gradient(145deg, #f1f5f9 0%, #e2e8f0 100%);
+            color: var(--apple-text);
+            border: 1px solid #e5e7eb;
+        }
+        .refund-modal-buttons .btn-confirm {
+            background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+            color: white;
+            border: none;
+            box-shadow: 0 4px 15px rgba(239, 68, 68, 0.3);
+        }
+        .refund-modal-buttons .btn-confirm:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(239, 68, 68, 0.4);
+        }
+
+        .profit-progress-container {
+            width: 100%;
+            max-width: 320px;
+            margin: 0 auto;
+            padding: 16px 20px;
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 16px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        .progress-label {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+            font-size: 12px;
+            font-weight: 600;
+            color: rgba(255, 255, 255, 0.9);
+        }
+        .progress-bar-bg {
+            width: 100%;
+            height: 12px;
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 6px;
+            overflow: hidden;
+            position: relative;
+        }
+        .progress-bar-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #34C759 0%, #30B0C7 100%);
+            border-radius: 6px;
+            transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+            overflow: hidden;
+        }
+        .progress-bar-fill::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
+            animation: progress-shimmer 2s infinite;
+        }
+        @keyframes progress-shimmer {
+            0% { left: -100%; }
+            100% { left: 100%; }
+        }
+        .progress-bar-fill.completed {
+            background: linear-gradient(90deg, #FFD60A 0%, #FF9500 100%);
+            box-shadow: 0 0 20px rgba(255, 149, 0, 0.4);
+        }
+        .progress-bar-fill.completed::before {
+            animation: none;
+        }
+        .progress-text {
+            text-align: center;
+            margin-top: 8px;
+            font-size: 11px;
+            font-weight: 700;
+            color: rgba(255, 255, 255, 0.8);
+            letter-spacing: 0.05em;
+        }
+        .progress-target {
+            font-size: 10px;
+            font-weight: 600;
+            color: rgba(255, 255, 255, 0.7);
+            background: rgba(255, 255, 255, 0.15);
+            padding: 2px 8px;
+            border-radius: 6px;
+        }
+        .progress-completed-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            background: linear-gradient(135deg, #FFD60A 0%, #FF9500 100%);
+            color: white;
+            padding: 4px 10px;
+            border-radius: 8px;
+            font-size: 10px;
+            font-weight: 700;
+            box-shadow: 0 4px 12px rgba(255, 149, 0, 0.3);
+            animation: badge-pulse 2s ease-in-out infinite;
+        }
+        @keyframes badge-pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+        }
+        @media (max-width: 640px) {
+            .profit-progress-container {
+                max-width: 100%;
+                padding: 12px 16px;
+            }
+            .progress-label {
+                font-size: 11px;
+            }
+            .progress-bar-bg {
+                height: 10px;
+            }
+            .progress-text {
+                font-size: 10px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="bg-decoration"></div>
+
+    <nav class="apple-nav sticky top-0 z-50">
+        <div class="max-w-4xl mx-auto px-4 h-14 flex items-center justify-center gap-2">
+            <button onclick="switchPage('overview')" id="btn-overview" class="nav-link active">📊 概览</button>
+            <button onclick="switchPage('orders')" id="btn-orders" class="nav-link">📝 记账</button>
+            <button onclick="switchPage('stock')" id="btn-stock" class="nav-link">📦库存</button>
+        </div>
+    </nav>
+
+    <main class="max-w-4xl mx-auto px-5 py-8 space-y-10">
+        
+        <section id="page-overview" class="page-section">
+            <div class="profit-hero mb-8">
+                <div class="profit-hero-content text-center">
+                    <p class="stat-label mb-3">💎 总利润</p>
+                    <h2 id="allProfit" class="text-6xl sm:text-7xl md:text-8xl font-extrabold tracking-tighter">¥0.00</h2>
+                    <div class="profit-progress-container mt-6">
+                        <div class="progress-label">
+                            <span id="progress-status">目标进度</span>
+                            <span class="progress-target" id="progress-target-display">目标 ¥10,000</span>
+                        </div>
+                        <div class="progress-bar-bg">
+                            <div id="progress-bar-fill" class="progress-bar-fill" style="width: 0%"></div>
+                        </div>
+                        <div class="progress-text">
+                            <span id="progress-percentage">0%</span>
+                            <span id="progress-completed-badge" class="progress-completed-badge hidden">🎉 目标达成</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-10">
+                <div class="health-card stat-card p-6 flex flex-col items-center">
+                    <span class="stat-icon">💰</span>
+                    <span class="stat-label mb-2">累计流水</span>
+                    <span id="allRev" class="stat-value text-slate-800">¥0</span>
+                </div>
+                <div class="health-card stat-card p-6 flex flex-col items-center">
+                    <span class="stat-icon">🧾</span>
+                    <span class="stat-label mb-2">已售成本</span>
+                    <span id="allCost" class="stat-value text-slate-800">¥0</span>
+                </div>
+                <div class="health-card stat-card highlight p-6 flex flex-col items-center col-span-2 md:col-span-2">
+                    <span class="stat-icon">📦</span>
+                    <span class="stat-label mb-2">储备价值</span>
+                    <span id="stockValue" class="stat-value text-blue-600">¥0</span>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                <div class="health-card chart-card md:col-span-2 p-8 h-80">
+                    <div class="chart-title">📈 利润趋势</div>
+                    <canvas id="profitChart"></canvas>
+                </div>
+                <div class="health-card chart-card p-8 h-80">
+                    <div class="chart-title">🎯 渠道分布</div>
+                    <canvas id="channelChart"></canvas>
+                </div>
+            </div>
+
+            <footer class="flex justify-center gap-6 pt-6 opacity-40 hover:opacity-100 transition-opacity">
+                <button onclick="downloadBackup()" class="text-xs font-bold underline hover:text-blue-600 transition-colors">💾 备份JSON</button>
+                <label class="text-xs font-bold underline cursor-pointer hover:text-blue-600 transition-colors">📂 导入数据<input type="file" onchange="importFromFile(this)" class="hidden"></label>
+            </footer>
+        </section>
+
+        <section id="page-stock" class="page-section hidden space-y-8">
+            <div class="health-card p-8 bg-white">
+                <h3 class="text-xl font-extrabold mb-6 tracking-tight flex items-center gap-2">📦 货物进项登记</h3>
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    <input id="s-name" type="text" placeholder="商品名称" class="apple-input md:col-span-2">
+                    <input id="s-sn" type="text" placeholder="货号/SKU" class="apple-input">
+                    <div class="flex gap-2">
+                        <input id="s-cost" type="number" placeholder="成本" class="apple-input font-bold">
+                        <input id="s-qty" type="number" value="1" class="apple-input w-24 text-center">
+                    </div>
+                    <button onclick="addStock()" class="apple-btn btn-glow md:col-span-4">添加到在库清单</button>
+                </div>
+            </div>
+            <div class="health-card p-4 bg-white space-y-3">
+                <input id="stock-search" type="text" placeholder="🔍 搜索库存（名称/货号/编号）" class="search-box" oninput="filterStock()">
+                <div class="flex items-center gap-3">
+                    <span class="text-xs font-bold text-slate-500 whitespace-nowrap">库存状态：</span>
+                    <select id="stock-status-filter" onchange="filterStock()" class="apple-input text-sm py-2 px-3">
+                        <option value="all">全部</option>
+                        <option value="sold-out">已售尽</option>
+                        <option value="in-stock">未出售</option>
+                    </select>
+                </div>
+            </div>
+            <div id="stock-list" class="grid grid-cols-1 md:grid-cols-2 gap-4"></div>
+        </section>
+
+        <section id="page-orders" class="page-section hidden space-y-8">
+            <div class="health-card p-8 bg-white border border-blue-100">
+                <h3 class="text-xl font-extrabold mb-6 tracking-tight text-blue-900 flex items-center gap-2">🖊️ 销售订单录入</h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <select id="o-stock-sel" onchange="syncStockPrice()" class="apple-input font-bold text-blue-800"></select>
+                    <input id="o-name" type="text" placeholder="订单备注" class="apple-input">
+                    <input id="o-price" type="number" placeholder="售价" class="apple-input font-black text-blue-600">
+                    <div class="flex gap-2">
+                        <select id="o-ch" class="apple-input flex-1">
+                            <option>闲鱼</option><option>拼多多</option><option>淘宝</option><option>私域</option>
+                        </select>
+                        <input id="o-qty" type="number" value="1" class="apple-input w-24 text-center">
+                    </div>
+                    <div class="md:col-span-2 grid grid-cols-3 gap-2 py-2 border-t border-slate-100">
+                        <input id="o-cp" type="number" placeholder="成本" class="apple-input text-xs">
+                        <input id="o-cs" type="number" placeholder="快递" class="apple-input text-xs">
+                        <input id="o-co" type="number" placeholder="其它" class="apple-input text-xs">
+                    </div>
+                    <button onclick="saveOrder()" class="apple-btn btn-glow md:col-span-2">确认交易</button>
+                </div>
+            </div>
+            <div class="health-card p-4 bg-white">
+                <input id="order-search" type="text" placeholder="🔍 搜索订单（备注/渠道/编号）" class="search-box" oninput="filterOrders()">
+            </div>
+            <div id="order-list" class="space-y-3 pb-16"></div>
+        </section>
+
+    </main>
+
+    <div id="refund-modal" class="refund-modal">
+        <div class="refund-modal-content">
+            <h3 class="refund-modal-title">💸 订单退款</h3>
+            <div class="refund-input-group">
+                <label>订单信息</label>
+                <div class="text-sm text-slate-600 bg-slate-50 p-3 rounded-lg">
+                    <p id="refund-order-num" class="font-bold text-blue-600"></p>
+                    <p id="refund-order-info" class="text-slate-500 mt-1"></p>
+                </div>
+            </div>
+            <div class="refund-input-group">
+                <label>退款损失（运费、包装费等）</label>
+                <input id="refund-loss" type="number" placeholder="输入损失金额" class="apple-input" step="0.01">
+            </div>
+            <div class="refund-modal-buttons">
+                <button onclick="hideRefundModal()" class="btn-cancel">取消</button>
+                <button onclick="confirmRefund()" class="btn-confirm">确认退款</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        /**
+         * Business Health Management System
+         * Version: 10.0
+         * Description: Complete business management solution with inventory, orders, and profit tracking
+         */
+        
+        // Database initialization with error handling
+        let db;
+        try {
+            db = JSON.parse(localStorage.getItem('hustle_health_v10')) || { 
+                orders: [], 
+                stocks: [], 
+                stockCounter: 0, 
+                orderCounter: 0 
+            };
+        } catch (error) {
+            console.error('Database initialization error:', error);
+            db = { orders: [], stocks: [], stockCounter: 0, orderCounter: 0 };
+        }
+
+        // Chart instances
+        let charts = { p: null, c: null };
+        
+        // Filtered data arrays
+        let filteredStocks = [];
+        let filteredOrders = [];
+
+        /**
+         * Switch between different pages
+         * @param {string} page - Page identifier ('overview', 'orders', 'stock')
+         */
+        function switchPage(page) {
+            try {
+                document.querySelectorAll('.page-section').forEach(section => {
+                    section.classList.add('hidden');
+                });
+                document.querySelectorAll('.nav-link').forEach(link => {
+                    link.classList.remove('active');
+                });
+                document.getElementById('page-' + page).classList.remove('hidden');
+                document.getElementById('btn-' + page).classList.add('active');
+                if(page === 'overview') {
+                    setTimeout(updateCharts, 50);
+                }
+            } catch (error) {
+                console.error('Page switch error:', error);
+            }
+        }
+
+        /**
+         * Add new stock item to inventory
+         * Validates input and generates unique 6-digit ID
+         */
+        function addStock() {
+            try {
+                const name = document.getElementById('s-name').value.trim();
+                const sku = document.getElementById('s-sn').value.trim();
+                const cost = parseFloat(document.getElementById('s-cost').value);
+                const quantity = parseInt(document.getElementById('s-qty').value);
+
+                // Input validation
+                if (!name) {
+                    alert('请输入商品名称');
+                    return;
+                }
+                if (isNaN(cost) || cost < 0) {
+                    alert('请输入有效的成本金额');
+                    return;
+                }
+                if (isNaN(quantity) || quantity < 1) {
+                    alert('请输入有效的数量（至少1）');
+                    return;
+                }
+
+                // Generate unique 6-digit ID
+                db.stockCounter = (db.stockCounter || 0) + 1;
+                const stockNumber = String(db.stockCounter).padStart(6, '0');
+
+                // Create stock object
+                const newStock = {
+                    id: Date.now(),
+                    num: stockNumber,
+                    n: name,
+                    sn: sku || 'SKU',
+                    c: cost || 0,
+                    q: quantity || 1
+                };
+
+                db.stocks.unshift(newStock);
+                saveAndRender();
+
+                // Clear form fields
+                ['s-name', 's-sn', 's-cost'].forEach(id => {
+                    document.getElementById(id).value = '';
+                });
+
+            } catch (error) {
+                console.error('Add stock error:', error);
+                alert('添加库存失败，请重试');
+            }
+        }
+
+        /**
+         * Sync stock price when selecting from dropdown
+         * @param {string} stockId - Selected stock ID
+         */
+        function syncStockPrice() {
+            try {
+                const stockId = document.getElementById('o-stock-sel').value;
+                if (!stockId) return;
+
+                const stock = db.stocks.find(item => item.id == stockId);
+                if (stock) {
+                    document.getElementById('o-name').value = stock.n;
+                    document.getElementById('o-cp').value = stock.c;
+                }
+            } catch (error) {
+                console.error('Sync stock price error:', error);
+            }
+        }
+
+        /**
+         * Save new order with inventory deduction
+         * Validates all inputs and handles stock quantity
+         */
+        function saveOrder() {
+            try {
+                const stockId = document.getElementById('o-stock-sel').value;
+                const price = parseFloat(document.getElementById('o-price').value);
+                const quantity = parseInt(document.getElementById('o-qty').value) || 1;
+                const costPrice = parseFloat(document.getElementById('o-cp').value) || 0;
+                const shippingCost = parseFloat(document.getElementById('o-cs').value) || 0;
+                const otherCost = parseFloat(document.getElementById('o-co').value) || 0;
+                const note = document.getElementById('o-name').value.trim();
+                const channel = document.getElementById('o-ch').value;
+
+                // Input validation
+                if (isNaN(price) || price <= 0) {
+                    alert('请输入有效的售价');
+                    return;
+                }
+                if (isNaN(quantity) || quantity < 1) {
+                    alert('请输入有效的数量（至少1）');
+                    return;
+                }
+
+                // Check stock availability
+                if (stockId) {
+                    const stockIndex = db.stocks.findIndex(s => s.id == stockId);
+                    if (stockIndex === -1) {
+                        alert('选择的库存不存在');
+                        return;
+                    }
+                    if (db.stocks[stockIndex].q < quantity) {
+                        alert(`库存余量不足。当前库存：${db.stocks[stockIndex].q}，需要：${quantity}`);
+                        return;
+                    }
+                    // Deduct from inventory
+                    db.stocks[stockIndex].q -= quantity;
+                }
+
+                // Generate unique 6-digit order ID
+                db.orderCounter = (db.orderCounter || 0) + 1;
+                const orderNumber = String(db.orderCounter).padStart(6, '0');
+
+                // Create order object
+                const newOrder = {
+                    id: Date.now(),
+                    num: orderNumber,
+                    date: new Date().toLocaleDateString(),
+                    n: note,
+                    ch: channel,
+                    p: price,
+                    qty: quantity,
+                    cp: costPrice,
+                    cs: shippingCost,
+                    co: otherCost,
+                    stockId: stockId ? parseInt(stockId) : null,
+                    refunded: false
+                };
+
+                db.orders.unshift(newOrder);
+                saveAndRender();
+
+                // Clear form fields
+                ['o-name', 'o-price', 'o-cp', 'o-cs', 'o-co'].forEach(id => {
+                    document.getElementById(id).value = '';
+                });
+
+            } catch (error) {
+                console.error('Save order error:', error);
+                alert('保存订单失败，请重试');
+            }
+        }
+
+        /**
+         * Filter stocks by search query and status
+         * Supports text search and status filtering
+         */
+        function filterStock() {
+            try {
+                const query = document.getElementById('stock-search').value.toLowerCase().trim();
+                const statusFilter = document.getElementById('stock-status-filter').value;
+                
+                filteredStocks = db.stocks.filter(stock => {
+                    // Text search: name, SKU, or number
+                    const matchesSearch = 
+                        (stock.n && stock.n.toLowerCase().includes(query)) ||
+                        (stock.sn && stock.sn.toLowerCase().includes(query)) ||
+                        (stock.num && stock.num.includes(query));
+                    
+                    // Status filter
+                    let matchesStatus = true;
+                    if (statusFilter === 'sold-out') {
+                        matchesStatus = stock.q === 0;
+                    } else if (statusFilter === 'in-stock') {
+                        matchesStatus = stock.q > 0;
+                    }
+                    
+                    return matchesSearch && matchesStatus;
+                });
+                
+                renderStockList();
+            } catch (error) {
+                console.error('Filter stock error:', error);
+            }
+        }
+
+        /**
+         * Filter orders by search query
+         * Supports text search: note, channel, or order number
+         */
+        function filterOrders() {
+            try {
+                const query = document.getElementById('order-search').value.toLowerCase().trim();
+                
+                filteredOrders = db.orders.filter(order => {
+                    return (order.n && order.n.toLowerCase().includes(query)) ||
+                           (order.ch && order.ch.toLowerCase().includes(query)) ||
+                           (order.num && order.num.includes(query));
+                });
+                
+                renderOrderList();
+            } catch (error) {
+                console.error('Filter orders error:', error);
+            }
+        }
+
+        /**
+         * Save data to localStorage and update UI
+         * Called after any data modification
+         */
+        function saveAndRender() {
+            try {
+                localStorage.setItem('hustle_health_v10', JSON.stringify(db));
+                
+                // Update stock dropdown
+                const stockSelect = document.getElementById('o-stock-sel');
+                stockSelect.innerHTML = '<option value="">从库选品 (自动同步进价)</option>' + 
+                    db.stocks.filter(s => s.q > 0)
+                        .map(s => `<option value="${s.id}">${s.n} (余${s.q})</option>`)
+                        .join('');
+                
+                // Reset filters
+                filteredStocks = db.stocks;
+                filteredOrders = db.orders;
+                
+                renderStockList();
+                renderOrderList();
+            } catch (error) {
+                console.error('Save and render error:', error);
+                alert('数据保存失败');
+            }
+        }
+
+        /**
+         * Render stock list with visual distinction
+         * Sold-out items are grayed out, in-stock items are highlighted
+         */
+        function renderStockList() {
+            try {
+                document.getElementById('stock-list').innerHTML = filteredStocks.map((stock, index) => {
+                    const isInStock = stock.q > 0;
+                    return `
+                        <div class="health-card p-5 flex justify-between items-center group ${isInStock ? 'in-stock' : 'sold-out'}">
+                            <div class="min-w-0">
+                                <div class="flex items-center gap-2 mb-1">
+                                    <span class="item-number">#${stock.num || '------'}</span>
+                                    <span class="text-[9px] px-1.5 py-0.5 rounded font-black ${isInStock ? 'bg-blue-500 text-white shadow-lg shadow-blue-500/30' : 'bg-slate-200 text-slate-500'}">
+                                        ${isInStock ? '在售' : '罄'}
+                                    </span>
+                                    <span class="text-[10px] font-mono text-slate-400 font-bold tracking-tight">${stock.sn}</span>
+                                </div>
+                                <h4 class="item-title truncate block">${stock.n}</h4>
+                                <p class="text-[10px] text-slate-400 font-medium mt-0.5">成本 ¥${stock.c}</p>
+                            </div>
+                            <div class="text-right ml-4">
+                                <p class="text-3xl font-black text-slate-900 font-mono tracking-tight">${stock.q}</p>
+                                <button onclick="deleteStock(${index})" class="text-[10px] text-red-400 opacity-0 group-hover:opacity-100 transition">移除</button>
+                            </div>
+                        </div>`;
+                }).join('');
+            } catch (error) {
+                console.error('Render stock list error:', error);
+            }
+        }
+
+        /**
+         * Render order list with refund status and delete functionality
+         * Calculates total profit including refund losses
+         */
+        function renderOrderList() {
+            try {
+                let totalRevenue = 0;
+                let totalCost = 0;
+                let stockValue = 0;
+                let totalRefundLoss = 0;
+
+                // Calculate stock value
+                db.stocks.forEach(stock => {
+                    stockValue += (stock.c * stock.q);
+                });
+
+                // Calculate totals from orders
+                filteredOrders.forEach(order => {
+                    if (!order.refunded) {
+                        totalRevenue += (order.p * order.qty);
+                        totalCost += ((order.cp * order.qty) + order.cs + order.co);
+                    } else {
+                        totalRefundLoss += (order.refundLoss || 0);
+                    }
+                });
+
+                // Update profit progress
+                const netProfit = (totalRevenue - totalCost) - totalRefundLoss;
+                updateProfitProgress(netProfit);
+
+                // Render order list
+                document.getElementById('order-list').innerHTML = filteredOrders.map((order, index) => {
+                    const cost = (order.cp * order.qty) + order.cs + order.co;
+                    const profit = (order.p * order.qty) - cost;
+                    const isRefunded = order.refunded || false;
+                    
+                    return `
+                        <div class="health-card p-5 flex justify-between items-center ${isRefunded ? 'refunded' : ''}">
+                            <div class="min-w-0 flex-1">
+                                <div class="flex items-center gap-2 mb-1">
+                                    ${isRefunded ? '<span class="refund-badge">已退款</span>' : ''}
+                                    <span class="item-number">#${order.num || '------'}</span>
+                                    <span class="text-[9px] bg-slate-100 px-2 py-0.5 rounded text-slate-500 font-bold">${order.ch}</span>
+                                    <p class="item-title truncate text-slate-900">${order.n || '未备注'}</p>
+                                </div>
+                                <p class="item-subtitle font-mono">${order.date} · ¥${order.cp} x ${order.qty}</p>
+                            </div>
+                            <div class="text-right shrinkage-0 ml-4 flex flex-col items-end gap-1">
+                                <p class="font-bold text-lg font-mono tracking-tight ${isRefunded ? 'profit-display' : ''} ${profit >= 0 ? 'text-blue-600' : 'text-red-500'}">
+                                    ¥${profit.toFixed(2)}
+                                </p>
+                                ${isRefunded ? `<p class="text-[10px] text-red-400 font-medium">退款损失 ¥${(order.refundLoss || 0).toFixed(2)}</p>` : ''}
+                                <div class="flex gap-2">
+                                    ${!isRefunded ? `<button onclick="showRefundModal(${index})" class="btn-refund">退款</button>` : ''}
+                                    <button onclick="confirmDeleteOrder(${index})" class="text-[10px] text-red-400 hover:text-red-600 transition font-bold">删除</button>
+                                </div>
+                            </div>
+                        </div>`;
+                }).join('');
+
+                // Update overview statistics
+                document.getElementById('allProfit').innerText = `¥${netProfit.toLocaleString(undefined, { minimumFractionDigits: 2 })}`;
+                document.getElementById('allRev').innerText = `¥${totalRevenue.toLocaleString()}`;
+                document.getElementById('allCost').innerText = `¥${totalCost.toLocaleString()}`;
+                document.getElementById('stockValue').innerText = `¥${stockValue.toLocaleString()}`;
+                
+                updateCharts();
+            } catch (error) {
+                console.error('Render order list error:', error);
+            }
+        }
+
+        /**
+         * Delete stock item with confirmation
+         * @param {number} index - Index in filtered array
+         */
+        function deleteStock(index) {
+            try {
+                const stock = filteredStocks[index];
+                if (!stock) return;
+
+                const realIndex = db.stocks.findIndex(s => s.id === stock.id);
+                if (realIndex !== -1) {
+                    db.stocks.splice(realIndex, 1);
+                    saveAndRender();
+                }
+            } catch (error) {
+                console.error('Delete stock error:', error);
+                alert('删除库存失败');
+            }
+        }
+
+        /**
+         * Confirm and delete order with detailed warning
+         * @param {number} index - Index in filtered array
+         */
+        function confirmDeleteOrder(index) {
+            try {
+                const order = filteredOrders[index];
+                if (!order) return;
+
+                let confirmMessage;
+                if (order.refunded) {
+                    confirmMessage = `确认删除已退款订单 #${order.num}？\n\n订单信息：${order.n || '未备注'}\n退款损失：¥${(order.refundLoss || 0).toFixed(2)}\n\n此操作不可恢复！`;
+                } else {
+                    confirmMessage = `确认删除订单 #${order.num}？\n\n订单信息：${order.n || '未备注'}\n金额：¥${order.p} x ${order.qty}\n\n此操作不可恢复！`;
+                }
+
+                if (confirm(confirmMessage)) {
+                    deleteOrder(index);
+                }
+            } catch (error) {
+                console.error('Confirm delete order error:', error);
+            }
+        }
+
+        /**
+         * Delete order from database
+         * @param {number} index - Index in filtered array
+         */
+        function deleteOrder(index) {
+            try {
+                const order = filteredOrders[index];
+                if (!order) return;
+
+                const realIndex = db.orders.findIndex(o => o.id === order.id);
+                if (realIndex !== -1) {
+                    db.orders.splice(realIndex, 1);
+                    saveAndRender();
+                }
+            } catch (error) {
+                console.error('Delete order error:', error);
+                alert('删除订单失败');
+            }
+        }
+
+        /**
+         * Show refund modal with order details
+         * @param {number} index - Index in filtered array
+         */
+        function showRefundModal(index) {
+            try {
+                const order = filteredOrders[index];
+                if (!order) return;
+
+                const modal = document.getElementById('refund-modal');
+                const orderNumber = document.getElementById('refund-order-num');
+                const orderInfo = document.getElementById('refund-order-info');
+                const refundLoss = document.getElementById('refund-loss');
+
+                orderNumber.textContent = `订单 #${order.num}`;
+                orderInfo.textContent = `${order.n || '未备注'} · ${order.ch} · ¥${order.p} x ${order.qty}`;
+                refundLoss.value = '';
+                refundLoss.dataset.orderIndex = index;
+
+                modal.classList.add('show');
+            } catch (error) {
+                console.error('Show refund modal error:', error);
+            }
+        }
+
+        /**
+         * Hide refund modal
+         */
+        function hideRefundModal() {
+            try {
+                document.getElementById('refund-modal').classList.remove('show');
+            } catch (error) {
+                console.error('Hide refund modal error:', error);
+            }
+        }
+
+        /**
+         * Process refund and restore inventory
+         * Handles refund loss calculation and stock restoration
+         */
+        function confirmRefund() {
+            try {
+                const refundLossAmount = parseFloat(document.getElementById('refund-loss').value) || 0;
+                const index = parseInt(document.getElementById('refund-loss').dataset.orderIndex);
+                const order = filteredOrders[index];
+
+                if (!order) return;
+
+                const realIndex = db.orders.findIndex(o => o.id === order.id);
+                if (realIndex === -1) return;
+
+                const orderData = db.orders[realIndex];
+
+                // Mark as refunded
+                orderData.refunded = true;
+                orderData.refundLoss = refundLossAmount;
+                orderData.refundDate = new Date().toLocaleDateString();
+
+                // Restore inventory if linked to stock
+                if (orderData.stockId) {
+                    const stockIndex = db.stocks.findIndex(s => s.id === orderData.stockId);
+                    if (stockIndex !== -1) {
+                        db.stocks[stockIndex].q += orderData.qty;
+                    }
+                }
+
+                saveAndRender();
+                hideRefundModal();
+
+                // Show success message
+                const successMessage = refundLossAmount > 0 
+                    ? `退款成功！库存已恢复，退款损失：¥${refundLossAmount.toFixed(2)}`
+                    : `退款成功！库存已恢复`;
+                alert(successMessage);
+
+            } catch (error) {
+                console.error('Confirm refund error:', error);
+                alert('退款处理失败，请重试');
+            }
+        }
+
+        // Profit target management
+        let currentProfitTarget = 10000;
+        let targetUpgraded = false;
+
+        /**
+         * Update profit progress bar
+         * @param {number} profit - Current net profit
+         * Handles target upgrade when reaching 10,000
+         */
+        function updateProfitProgress(profit) {
+            try {
+                const progressBar = document.getElementById('progress-bar-fill');
+                const progressPercentage = document.getElementById('progress-percentage');
+                const progressTargetDisplay = document.getElementById('progress-target-display');
+                const progressCompletedBadge = document.getElementById('progress-completed-badge');
+                const progressStatus = document.getElementById('progress-status');
+
+                // Calculate percentage
+                const percentage = Math.min((profit / currentProfitTarget) * 100, 100);
+                
+                // Check if target reached and upgrade
+                if (profit >= currentProfitTarget && !targetUpgraded) {
+                    currentProfitTarget = 100000;
+                    targetUpgraded = true;
+                    progressTargetDisplay.textContent = `目标 ¥${currentProfitTarget.toLocaleString()}`;
+                    progressStatus.textContent = '新目标';
+                }
+
+                // Update progress bar
+                progressBar.style.width = `${percentage}%`;
+                progressPercentage.textContent = `${percentage.toFixed(1)}%`;
+
+                // Handle completion state
+                if (percentage >= 100) {
+                    progressBar.classList.add('completed');
+                    progressCompletedBadge.classList.remove('hidden');
+                    progressPercentage.classList.add('hidden');
+                } else {
+                    progressBar.classList.remove('completed');
+                    progressCompletedBadge.classList.add('hidden');
+                    progressPercentage.classList.remove('hidden');
+                }
+            } catch (error) {
+                console.error('Update profit progress error:', error);
+            }
+        }
+
+        /**
+         * Update charts with current data
+         * Excludes refunded orders from calculations
+         */
+        function updateCharts() {
+            try {
+                const dailyData = {};
+                const channelData = {};
+
+                [...db.orders].reverse().forEach(order => {
+                    // Skip refunded orders
+                    if (order.refunded) {
+                        dailyData[order.date] = (dailyData[order.date] || 0) - (order.refundLoss || 0);
+                        return;
+                    }
+
+                    const profit = (order.p * order.qty) - ((order.cp * order.qty) + order.cs + order.co);
+                    dailyData[order.date] = (dailyData[order.date] || 0) + profit;
+                    channelData[order.ch] = (channelData[order.ch] || 0) + profit;
+                });
+
+                // Update profit trend chart
+                if (charts.p) charts.p.destroy();
+                charts.p = new Chart(document.getElementById('profitChart'), {
+                    type: 'line',
+                    data: {
+                        labels: Object.keys(dailyData),
+                        datasets: [{
+                            data: Object.values(dailyData),
+                            borderColor: '#007AFF',
+                            tension: 0.4,
+                            fill: true,
+                            backgroundColor: 'rgba(0, 122, 255, 0.02)',
+                            borderWidth: 3,
+                            pointRadius: 0
+                        }]
+                    },
+                    options: {
+                        maintainAspectRatio: false,
+                        plugins: { legend: { display: false } },
+                        scales: {
+                            y: { beginAtZero: true, grid: { color: '#E5E5EA' } },
+                            x: { display: false }
+                        }
+                    }
+                });
+
+                // Update channel distribution chart
+                Chart.defaults.color = '#8E8E93';
+                Chart.defaults.font.family = "'Inter', -apple-system, sans-serif";
+                
+                if (charts.c) charts.c.destroy();
+                charts.c = new Chart(document.getElementById('channelChart'), {
+                    type: 'doughnut',
+                    data: {
+                        labels: Object.keys(channelData),
+                        datasets: [{
+                            data: Object.values(channelData),
+                            backgroundColor: ['#007AFF', '#34C759', '#FF9500', '#AF52DE'],
+                            borderWidth: 0
+                        }]
+                    },
+                    options: {
+                        maintainAspectRatio: false,
+                        cutout: '82%',
+                        plugins: {
+                            legend: {
+                                position: 'bottom',
+                                labels: {
+                                    boxWidth: 8,
+                                    font: { size: 10, weight: '700' },
+                                    padding: 15
+                                }
+                            }
+                        }
+                    }
+                });
+            } catch (error) {
+                console.error('Update charts error:', error);
+            }
+        }
+
+        /**
+         * Download database as JSON backup file
+         */
+        function downloadBackup() {
+            try {
+                const blob = new Blob([JSON.stringify(db, null, 2)], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `Business_Health_Backup_${new Date().toISOString().split('T')[0]}.json`;
+                a.click();
+                URL.revokeObjectURL(url);
+            } catch (error) {
+                console.error('Download backup error:', error);
+                alert('备份下载失败');
+            }
+        }
+
+        /**
+         * Import database from JSON file
+         * @param {HTMLInputElement} input - File input element
+         */
+        function importFromFile(input) {
+            try {
+                const file = input.files[0];
+                if (!file) return;
+
+                const reader = new FileReader();
+                reader.onload = function(event) {
+                    try {
+                        const importedData = JSON.parse(event.target.result);
+                        
+                        // Validate imported data structure
+                        if (!importedData.orders || !importedData.stocks) {
+                            throw new Error('无效的数据格式');
+                        }
+
+                        // Confirm import
+                        if (confirm(`确认导入数据？\n\n订单数量：${importedData.orders.length}\n库存数量：${importedData.stocks.length}\n\n此操作将覆盖当前数据！`)) {
+                            db = importedData;
+                            saveAndRender();
+                            alert('数据导入成功！');
+                        }
+                    } catch (parseError) {
+                        alert('数据解析失败：' + parseError.message);
+                    }
+                };
+                reader.readAsText(file);
+            } catch (error) {
+                console.error('Import file error:', error);
+                alert('文件导入失败');
+            }
+        }
+
+        // Initialize application on page load
+        window.onload = function() {
+            try {
+                saveAndRender();
+                switchPage('overview');
+            } catch (error) {
+                console.error('Initialization error:', error);
+                alert('应用初始化失败，请刷新页面');
+            }
+        };
+    </script>
+</body>
+</html>
