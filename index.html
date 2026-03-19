@@ -2610,22 +2610,281 @@
         }
 
         /**
-         * Delete order from database
+         * Transaction Manager
+         * Manages database operations with rollback capability
+         * Ensures atomic operations for order deletion and stock restoration
+         */
+        const TransactionManager = {
+            // Store backup state for rollback
+            backup: null,
+
+            /**
+             * Start a new transaction
+             * Creates a backup of the current database state
+             * @returns {boolean} True if transaction started successfully
+             */
+            begin() {
+                try {
+                    this.backup = JSON.parse(JSON.stringify(db));
+                    console.log('Transaction started');
+                    return true;
+                } catch (error) {
+                    console.error('Transaction begin error:', error);
+                    return false;
+                }
+            },
+
+            /**
+             * Commit the transaction
+             * Clears the backup after successful operations
+             */
+            commit() {
+                this.backup = null;
+                console.log('Transaction committed');
+            },
+
+            /**
+             * Rollback to the backup state
+             * Restores database to the state before transaction began
+             * @returns {boolean} True if rollback successful
+             */
+            rollback() {
+                try {
+                    if (this.backup) {
+                        db = this.backup;
+                        this.backup = null;
+                        console.log('Transaction rolled back');
+                        return true;
+                    }
+                    return false;
+                } catch (error) {
+                    console.error('Transaction rollback error:', error);
+                    return false;
+                }
+            }
+        };
+
+        /**
+         * Restore stock quantity for a deleted order
+         * Increases stock quantity by the order quantity
+         * @param {Object} order - The order being deleted
+         * @returns {Object} Result with success status and details
+         */
+        function restoreStockForOrder(order) {
+            try {
+                if (!order) {
+                    return { success: false, error: 'Invalid order' };
+                }
+
+                // Check if order has associated stock
+                if (!order.stockId) {
+                    console.log('Order has no associated stock, skipping stock restoration');
+                    return { success: true, restored: false, message: 'No stock to restore' };
+                }
+
+                // Find the stock item
+                const stockIndex = db.stocks.findIndex(s => s.id === order.stockId);
+                if (stockIndex === -1) {
+                    console.warn(`Stock item ${order.stockId} not found for order ${order.num}`);
+                    return { success: false, error: 'Associated stock not found' };
+                }
+
+                const stock = db.stocks[stockIndex];
+                const restoreQty = order.qty || 1;
+
+                // Restore stock quantity
+                const previousQty = stock.q;
+                stock.q += restoreQty;
+
+                console.log(`Stock restored: ${stock.n} (${stock.num}) - ${previousQty} → ${stock.q} (+${restoreQty})`);
+
+                return {
+                    success: true,
+                    restored: true,
+                    stockId: stock.id,
+                    stockNum: stock.num,
+                    stockName: stock.n,
+                    previousQty,
+                    newQty: stock.q,
+                    restoredQty: restoreQty
+                };
+            } catch (error) {
+                console.error('Restore stock for order error:', error);
+                return { success: false, error: error.message };
+            }
+        }
+
+        /**
+         * Delete order from database with stock restoration
+         * Implements atomic transaction with rollback capability
          * @param {number} index - Index in filtered array
+         * @returns {Object} Operation result with status and details
          */
         function deleteOrder(index) {
+            const operationResult = {
+                success: false,
+                orderDeleted: false,
+                stockRestored: false,
+                orderNum: null,
+                stockDetails: null,
+                message: ''
+            };
+
             try {
                 const order = filteredOrders[index];
-                if (!order) return;
-
-                const realIndex = db.orders.findIndex(o => o.id === order.id);
-                if (realIndex !== -1) {
-                    db.orders.splice(realIndex, 1);
-                    saveAndRender();
+                if (!order) {
+                    operationResult.message = '订单不存在';
+                    return operationResult;
                 }
+
+                operationResult.orderNum = order.num;
+
+                // Begin transaction
+                if (!TransactionManager.begin()) {
+                    operationResult.message = '无法启动事务，请重试';
+                    return operationResult;
+                }
+
+                // Step 1: Restore stock quantity
+                const stockRestoreResult = restoreStockForOrder(order);
+                if (!stockRestoreResult.success) {
+                    // Rollback transaction
+                    TransactionManager.rollback();
+                    operationResult.message = `库存回退失败: ${stockRestoreResult.error}`;
+                    return operationResult;
+                }
+
+                operationResult.stockRestored = stockRestoreResult.restored;
+                operationResult.stockDetails = stockRestoreResult;
+
+                // Step 2: Delete the order
+                const realIndex = db.orders.findIndex(o => o.id === order.id);
+                if (realIndex === -1) {
+                    // Rollback transaction
+                    TransactionManager.rollback();
+                    operationResult.message = '订单未找到，可能已被删除';
+                    return operationResult;
+                }
+
+                const deletedOrder = db.orders.splice(realIndex, 1)[0];
+                operationResult.orderDeleted = true;
+
+                // Commit transaction
+                TransactionManager.commit();
+
+                // Save changes and update UI
+                saveAndRender();
+
+                // Build success message
+                if (operationResult.stockRestored) {
+                    operationResult.message = `订单 #${order.num} 已删除\n库存已回退: ${stockRestoreResult.stockName}\n数量: +${stockRestoreResult.restoredQty} (当前库存: ${stockRestoreResult.newQty})`;
+                } else {
+                    operationResult.message = `订单 #${order.num} 已删除`;
+                }
+
+                operationResult.success = true;
+
+                // Show success notification
+                showNotification(operationResult.message, 'success');
+
+                return operationResult;
+
             } catch (error) {
                 console.error('Delete order error:', error);
-                alert('删除订单失败');
+
+                // Attempt rollback on any error
+                TransactionManager.rollback();
+
+                operationResult.message = `删除失败: ${error.message}`;
+
+                // Show error notification
+                showNotification(operationResult.message, 'error');
+
+                return operationResult;
+            }
+        }
+
+        /**
+         * Show notification to user
+         * Displays a toast notification with the specified message and type
+         * @param {string} message - Message to display
+         * @param {string} type - Notification type ('success' or 'error')
+         */
+        function showNotification(message, type = 'info') {
+            try {
+                // Create notification element
+                const notification = document.createElement('div');
+                notification.className = `notification notification-${type}`;
+                notification.innerHTML = `
+                    <div class="notification-content">
+                        <span class="notification-icon">${type === 'success' ? '✓' : type === 'error' ? '✗' : 'ℹ'}</span>
+                        <span class="notification-message">${message.replace(/\n/g, '<br>')}</span>
+                    </div>
+                `;
+
+                // Add styles
+                notification.style.cssText = `
+                    position: fixed;
+                    top: 20px;
+                    right: 20px;
+                    background: ${type === 'success' ? '#10B981' : type === 'error' ? '#EF4444' : '#3B82F6'};
+                    color: white;
+                    padding: 16px 24px;
+                    border-radius: 12px;
+                    box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+                    z-index: 10000;
+                    max-width: 400px;
+                    animation: slideInRight 0.3s ease;
+                    font-weight: 500;
+                    line-height: 1.5;
+                `;
+
+                // Add animation styles if not already present
+                if (!document.getElementById('notification-styles')) {
+                    const style = document.createElement('style');
+                    style.id = 'notification-styles';
+                    style.textContent = `
+                        @keyframes slideInRight {
+                            from { transform: translateX(100%); opacity: 0; }
+                            to { transform: translateX(0); opacity: 1; }
+                        }
+                        @keyframes slideOutRight {
+                            from { transform: translateX(0); opacity: 1; }
+                            to { transform: translateX(100%); opacity: 0; }
+                        }
+                        .notification-content {
+                            display: flex;
+                            align-items: flex-start;
+                            gap: 12px;
+                        }
+                        .notification-icon {
+                            font-size: 20px;
+                            flex-shrink: 0;
+                        }
+                        .notification-message {
+                            word-break: break-word;
+                        }
+                    `;
+                    document.head.appendChild(style);
+                }
+
+                // Add to document
+                document.body.appendChild(notification);
+
+                // Remove after 4 seconds
+                setTimeout(() => {
+                    notification.style.animation = 'slideOutRight 0.3s ease forwards';
+                    setTimeout(() => {
+                        if (notification.parentNode) {
+                            notification.parentNode.removeChild(notification);
+                        }
+                    }, 300);
+                }, 4000);
+
+            } catch (error) {
+                console.error('Show notification error:', error);
+                // Fallback to alert
+                alert(message);
             }
         }
 
@@ -2698,6 +2957,104 @@
             } catch (error) {
                 console.error('Generate stock order numbers error:', error);
                 return [];
+            }
+        }
+
+        /**
+         * Test delete order with stock restoration
+         * @param {number} orderIndex - Index of order to test delete
+         * @returns {Object} Test result
+         */
+        function testDeleteOrderWithStock(orderIndex = 0) {
+            console.log('Testing delete order with stock restoration...');
+            
+            try {
+                if (!filteredOrders || filteredOrders.length === 0) {
+                    return { success: false, error: 'No orders available for testing' };
+                }
+                
+                const order = filteredOrders[orderIndex];
+                if (!order) {
+                    return { success: false, error: 'Order not found at index ' + orderIndex };
+                }
+                
+                console.log('Testing delete for order:', order);
+                
+                // Get stock before deletion
+                let stockBefore = null;
+                if (order.stockId) {
+                    const stock = db.stocks.find(s => s.id === order.stockId);
+                    if (stock) {
+                        stockBefore = { ...stock };
+                    }
+                }
+                
+                // Perform deletion
+                const result = deleteOrder(orderIndex);
+                
+                return {
+                    success: result.success,
+                    orderDeleted: result.orderDeleted,
+                    stockRestored: result.stockRestored,
+                    orderNum: result.orderNum,
+                    stockBefore,
+                    stockAfter: result.stockDetails,
+                    message: result.message
+                };
+            } catch (error) {
+                console.error('Test delete order with stock error:', error);
+                return { success: false, error: error.message };
+            }
+        }
+
+        /**
+         * Test transaction rollback mechanism
+         * Simulates an error condition to verify rollback works
+         * @returns {Object} Test result
+         */
+        function testDeleteOrderTransaction() {
+            console.log('Testing transaction rollback mechanism...');
+            
+            try {
+                // Create a backup
+                const originalDb = JSON.parse(JSON.stringify(db));
+                
+                // Test 1: Successful transaction
+                console.log('Test 1: Testing successful transaction...');
+                TransactionManager.begin();
+                const testStock = { id: 99999, num: '999999', n: 'Test Stock', q: 10, c: 100, sn: 'TEST' };
+                db.stocks.push(testStock);
+                TransactionManager.commit();
+                
+                const stockAdded = db.stocks.some(s => s.id === 99999);
+                console.log('Stock added successfully:', stockAdded);
+                
+                // Test 2: Rollback transaction
+                console.log('Test 2: Testing transaction rollback...');
+                const stockCountBefore = db.stocks.length;
+                TransactionManager.begin();
+                db.stocks.push({ id: 88888, num: '888888', n: 'Rollback Test', q: 5, c: 50, sn: 'ROLLBACK' });
+                TransactionManager.rollback();
+                
+                const stockCountAfter = db.stocks.length;
+                const rollbackSuccess = stockCountBefore === stockCountAfter;
+                console.log('Rollback successful:', rollbackSuccess);
+                
+                // Restore original database
+                db = originalDb;
+                saveAndRender();
+                
+                return {
+                    success: stockAdded && rollbackSuccess,
+                    tests: {
+                        commit: stockAdded,
+                        rollback: rollbackSuccess
+                    },
+                    message: stockAdded && rollbackSuccess ? 'All transaction tests passed' : 'Some tests failed'
+                };
+            } catch (error) {
+                console.error('Test transaction error:', error);
+                return { success: false, error: error.message };
             }
         }
 
@@ -3031,6 +3388,10 @@
                 window.testAlternatingStocks = () => OrderNumberTesting.testAlternatingStocks();
                 window.testDeletionScenario = (stockNum) => OrderNumberTesting.testAfterDeletion(stockNum);
                 
+                // Expose transaction and deletion testing functions
+                window.testDeleteOrderWithStock = (orderIndex) => testDeleteOrderWithStock(orderIndex);
+                window.testDeleteOrderTransaction = () => testDeleteOrderTransaction();
+                
                 console.log('System testing functions available:');
                 console.log('  - runSystemTests(): Run all system tests');
                 console.log('  - testConcurrency(count): Test number generation uniqueness');
@@ -3041,6 +3402,9 @@
                 console.log('  - testSequentialOrders(stockNum, count): Test sequential order generation');
                 console.log('  - testAlternatingStocks(): Test alternating stock scenarios');
                 console.log('  - testDeletionScenario(stockNum): Test after deletion scenario');
+                console.log('Order deletion testing functions available:');
+                console.log('  - testDeleteOrderWithStock(orderIndex): Test delete with stock restoration');
+                console.log('  - testDeleteOrderTransaction(): Test transaction rollback');
                 
                 // Initialize cost input interactions after DOM is ready
                 setTimeout(initializeCostInputs, 100);
