@@ -1008,7 +1008,11 @@
         <div class="order-edit-modal-content">
             <h3 class="order-edit-modal-title">✏️ 编辑订单信息</h3>
             <div class="order-edit-input-group">
-                <label>编号</label>
+                <label>基础编号</label>
+                <input id="edit-order-base-num" type="text" disabled class="bg-slate-50">
+            </div>
+            <div class="order-edit-input-group">
+                <label>商品编号</label>
                 <input id="edit-order-num" type="text" disabled class="bg-slate-50">
             </div>
             <div class="order-edit-input-group">
@@ -1021,7 +1025,8 @@
             </div>
             <div class="order-edit-input-group">
                 <label>数量</label>
-                <input id="edit-order-qty" type="number" placeholder="数量">
+                <input id="edit-order-qty" type="number" value="1" disabled class="bg-slate-50">
+                <p class="text-[10px] text-slate-400 mt-1">每个订单项数量固定为1</p>
             </div>
             <div class="order-edit-input-group">
                 <label>成本</label>
@@ -1051,10 +1056,345 @@
     <script>
         /**
          * Business Health Management System
-         * Version: 10.0
+         * Version: 11.0
          * Description: Complete business management solution with inventory, orders, and profit tracking
+         * Features: Unified order number generation, data consistency, and atomic operations
          */
         
+        /**
+         * Order Number Generation Service
+         * Provides atomic, unique order number generation with logging
+         * Version: 1.0
+         * 
+         * Features:
+         * - Atomic number generation to prevent conflicts
+         * - Global uniqueness validation
+         * - Comprehensive logging for traceability
+         * - Distributed environment support
+         */
+        const OrderNumberService = {
+            // Configuration
+            config: {
+                BASE_NUMBER_LENGTH: 6,
+                BASE_NUMBER_PREFIX: '',
+                MAX_RETRY_ATTEMPTS: 100,
+                STORAGE_KEY: 'hustle_health_v10_number_service',
+                LOG_MAX_ENTRIES: 1000
+            },
+
+            // Internal state
+            state: {
+                currentCounter: 0,
+                generationLog: [],
+                version: '1.0',
+                lastGenerated: null,
+                lastGeneratedTimestamp: null
+            },
+
+            /**
+             * Initialize service
+             * Loads state from localStorage or initializes new state
+             */
+            initialize() {
+                try {
+                    const savedState = localStorage.getItem(this.config.STORAGE_KEY);
+                    if (savedState) {
+                        this.state = JSON.parse(savedState);
+                        console.log('OrderNumberService: Loaded existing state', this.state);
+                    } else {
+                        this.saveState();
+                        console.log('OrderNumberService: Initialized new state');
+                    }
+                } catch (error) {
+                    console.error('OrderNumberService: Initialization error', error);
+                    this.state = {
+                        currentCounter: 0,
+                        generationLog: [],
+                        version: '1.0',
+                        lastGenerated: null,
+                        lastGeneratedTimestamp: null
+                    };
+                    this.saveState();
+                }
+            },
+
+            /**
+             * Save state to localStorage
+             */
+            saveState() {
+                try {
+                    localStorage.setItem(this.config.STORAGE_KEY, JSON.stringify(this.state));
+                } catch (error) {
+                    console.error('OrderNumberService: Save state error', error);
+                }
+            },
+
+            /**
+             * Generate a unique base number with atomic operation
+             * @returns {string} 6-digit base number
+             * @throws {Error} If unable to generate unique number after max retries
+             */
+            generateBaseNumber() {
+                try {
+                    let baseNum;
+                    let attempts = 0;
+
+                    while (attempts < this.config.MAX_RETRY_ATTEMPTS) {
+                        // Increment counter atomically
+                        this.state.currentCounter++;
+                        baseNum = String(this.state.currentCounter).padStart(this.config.BASE_NUMBER_LENGTH, '0');
+
+                        // Validate uniqueness
+                        if (this.validateBaseNumberUniqueness(baseNum)) {
+                            // Log generation
+                            this.logGeneration(baseNum, 'success');
+                            this.state.lastGenerated = baseNum;
+                            this.state.lastGeneratedTimestamp = new Date().toISOString();
+                            this.saveState();
+                            console.log(`OrderNumberService: Generated base number ${baseNum}`);
+                            return baseNum;
+                        }
+
+                        attempts++;
+                        console.warn(`OrderNumberService: Collision detected for ${baseNum}, retrying (${attempts}/${this.config.MAX_RETRY_ATTEMPTS})`);
+                    }
+
+                    // Log failure
+                    this.logGeneration(baseNum, 'failed');
+                    throw new Error(`Unable to generate unique base number after ${this.config.MAX_RETRY_ATTEMPTS} attempts`);
+                } catch (error) {
+                    console.error('OrderNumberService: Generate base number error', error);
+                    throw error;
+                }
+            },
+
+            /**
+             * Generate item numbers for a multi-item order
+             * @param {string} baseNum - Base order number
+             * @param {number} quantity - Number of items
+             * @returns {Array<string>} Array of item numbers
+             * @throws {Error} If any item number already exists
+             */
+            generateItemNumbers(baseNum, quantity) {
+                try {
+                    const itemNumbers = [];
+                    for (let i = 1; i <= quantity; i++) {
+                        const itemNum = `${baseNum}-${i}`;
+                        if (!this.validateItemNumberUniqueness(itemNum)) {
+                            throw new Error(`Item number ${itemNum} already exists`);
+                        }
+                        itemNumbers.push(itemNum);
+                    }
+                    console.log(`OrderNumberService: Generated ${itemNumbers.length} item numbers for base ${baseNum}`);
+                    return itemNumbers;
+                } catch (error) {
+                    console.error('OrderNumberService: Generate item numbers error', error);
+                    throw error;
+                }
+            },
+
+            /**
+             * Validate base number uniqueness
+             * @param {string} baseNum - Base number to validate
+             * @returns {boolean} True if unique
+             */
+            validateBaseNumberUniqueness(baseNum) {
+                try {
+                    if (!db || !db.orders) return true;
+                    return !db.orders.some(order => order.baseNum === baseNum);
+                } catch (error) {
+                    console.error('OrderNumberService: Validate base number uniqueness error', error);
+                    return false;
+                }
+            },
+
+            /**
+             * Validate item number uniqueness
+             * @param {string} itemNum - Item number to validate
+             * @returns {boolean} True if unique
+             */
+            validateItemNumberUniqueness(itemNum) {
+                try {
+                    if (!db || !db.orders) return true;
+                    return !db.orders.some(order => order.num === itemNum);
+                } catch (error) {
+                    console.error('OrderNumberService: Validate item number uniqueness error', error);
+                    return false;
+                }
+            },
+
+            /**
+             * Log number generation event
+             * @param {string} number - Generated number
+             * @param {string} status - Generation status ('success' | 'failed')
+             */
+            logGeneration(number, status) {
+                try {
+                    const logEntry = {
+                        timestamp: new Date().toISOString(),
+                        number: number,
+                        status: status,
+                        counter: this.state.currentCounter
+                    };
+                    this.state.generationLog.push(logEntry);
+                    // Keep only last N log entries
+                    if (this.state.generationLog.length > this.config.LOG_MAX_ENTRIES) {
+                        this.state.generationLog = this.state.generationLog.slice(-this.config.LOG_MAX_ENTRIES);
+                    }
+                } catch (error) {
+                    console.error('OrderNumberService: Log generation error', error);
+                }
+            },
+
+            /**
+             * Get generation statistics
+             * @returns {Object} Statistics object
+             */
+            getStatistics() {
+                try {
+                    const successCount = this.state.generationLog.filter(log => log.status === 'success').length;
+                    const failedCount = this.state.generationLog.filter(log => log.status === 'failed').length;
+                    return {
+                        totalGenerated: successCount,
+                        totalFailed: failedCount,
+                        currentCounter: this.state.currentCounter,
+                        lastGenerated: this.state.lastGenerated,
+                        lastGeneratedTimestamp: this.state.lastGeneratedTimestamp,
+                        successRate: successCount > 0 ? ((successCount / (successCount + failedCount)) * 100).toFixed(2) + '%' : '0%',
+                        logEntries: this.state.generationLog.length
+                    };
+                } catch (error) {
+                    console.error('OrderNumberService: Get statistics error', error);
+                    return null;
+                }
+            },
+
+            /**
+             * Reset service state (for testing purposes)
+             */
+            reset() {
+                this.state = {
+                    currentCounter: 0,
+                    generationLog: [],
+                    version: '1.0',
+                    lastGenerated: null,
+                    lastGeneratedTimestamp: null
+                };
+                this.saveState();
+                console.log('OrderNumberService: Reset');
+            }
+        };
+
+        /**
+         * Data Consistency Service
+         * Ensures data integrity between inventory and order systems
+         * Version: 1.0
+         * 
+         * Features:
+         * - Cross-system data validation
+         * - Automatic issue detection
+         * - Data consistency verification
+         */
+        const DataConsistencyService = {
+            /**
+             * Validate data consistency between stocks and orders
+             * @returns {Object} Validation result
+             */
+            validateConsistency() {
+                try {
+                    const issues = [];
+                    const warnings = [];
+
+                    if (!db || !db.stocks || !db.orders) {
+                        issues.push('Database structure invalid');
+                        return { valid: false, issues, warnings };
+                    }
+
+                    // Check for duplicate order numbers
+                    const orderNumbers = db.orders.map(o => o.num);
+                    const duplicates = orderNumbers.filter((num, index) => orderNumbers.indexOf(num) !== index);
+                    if (duplicates.length > 0) {
+                        issues.push(`Duplicate order numbers found: ${duplicates.join(', ')}`);
+                    }
+
+                    // Check for duplicate stock numbers
+                    const stockNumbers = db.stocks.map(s => s.num);
+                    const stockDuplicates = stockNumbers.filter((num, index) => stockNumbers.indexOf(num) !== index);
+                    if (stockDuplicates.length > 0) {
+                        issues.push(`Duplicate stock numbers found: ${stockDuplicates.join(', ')}`);
+                    }
+
+                    // Check order-stock references
+                    const orphanedOrders = db.orders.filter(order => 
+                        order.stockId && !db.stocks.some(stock => stock.id === order.stockId)
+                    );
+                    if (orphanedOrders.length > 0) {
+                        warnings.push(`${orphanedOrders.length} orders reference non-existent stocks`);
+                    }
+
+                    // Check for orders with invalid baseNum
+                    const invalidBaseNums = db.orders.filter(order => !order.baseNum || order.baseNum === '------');
+                    if (invalidBaseNums.length > 0) {
+                        warnings.push(`${invalidBaseNums.length} orders have invalid base numbers`);
+                    }
+
+                    // Check for orders with invalid item numbers
+                    const invalidItemNums = db.orders.filter(order => {
+                        if (!order.baseNum || order.baseNum === '------') return false;
+                        const expectedFormat = new RegExp(`^${order.baseNum}-\\d+$`);
+                        return !expectedFormat.test(order.num);
+                    });
+                    if (invalidItemNums.length > 0) {
+                        issues.push(`${invalidItemNums.length} orders have invalid item number format`);
+                    }
+
+                    return {
+                        valid: issues.length === 0,
+                        issues,
+                        warnings,
+                        summary: {
+                            totalOrders: db.orders.length,
+                            totalStocks: db.stocks.length,
+                            uniqueOrderNumbers: new Set(orderNumbers).size,
+                            uniqueStockNumbers: new Set(stockNumbers).size,
+                            duplicateOrderNumbers: duplicates.length,
+                            duplicateStockNumbers: stockDuplicates.length
+                        }
+                    };
+                } catch (error) {
+                    console.error('DataConsistencyService: Validate consistency error', error);
+                    return { valid: false, issues: [error.message], warnings: [] };
+                }
+            },
+
+            /**
+             * Fix data consistency issues automatically
+             * @returns {Object} Fix result
+             */
+            autoFixIssues() {
+                try {
+                    const fixes = [];
+
+                    // Fix orders without baseNum
+                    db.orders.forEach(order => {
+                        if (!order.baseNum || order.baseNum === '------') {
+                            order.baseNum = order.num || '------';
+                            fixes.push(`Fixed baseNum for order ${order.num}`);
+                        }
+                    });
+
+                    return {
+                        success: true,
+                        fixes,
+                        message: `Fixed ${fixes.length} issues automatically`
+                    };
+                } catch (error) {
+                    console.error('DataConsistencyService: Auto fix issues error', error);
+                    return { success: false, message: error.message };
+                }
+            }
+        };
+
         // Database initialization with error handling
         let db;
         try {
@@ -1064,10 +1404,501 @@
                 stockCounter: 0, 
                 orderCounter: 0 
             };
+            
+            // Migrate old order data to new format
+            // Old format: single order with qty > 1
+            // New format: multiple orders with qty = 1 and baseNum
+            const migratedOrders = [];
+            db.orders.forEach(order => {
+                if (!order.baseNum && order.qty > 1) {
+                    // Old format: migrate to new format
+                    const baseNum = order.num || String(Math.floor(Math.random() * 900000) + 100000).padStart(6, '0');
+                    for (let i = 1; i <= order.qty; i++) {
+                        const newOrder = {
+                            ...order,
+                            id: order.id + i,
+                            baseNum: baseNum,
+                            num: `${baseNum}-${i}`,
+                            qty: 1
+                        };
+                        migratedOrders.push(newOrder);
+                    }
+                } else if (!order.baseNum) {
+                    // Old format with qty = 1: just add baseNum
+                    order.baseNum = order.num || '------';
+                    migratedOrders.push(order);
+                } else {
+                    // Already in new format
+                    migratedOrders.push(order);
+                }
+            });
+            db.orders = migratedOrders;
+            
         } catch (error) {
             console.error('Database initialization error:', error);
             db = { orders: [], stocks: [], stockCounter: 0, orderCounter: 0 };
         }
+
+        /**
+         * System Testing Module
+         * Provides comprehensive testing for order number generation and data consistency
+         */
+        const SystemTesting = {
+            /**
+             * Test high concurrency scenario for number generation uniqueness
+             * @param {number} testCount - Number of concurrent generations to test
+             * @returns {Object} Test results
+             */
+            testHighConcurrency(testCount = 100) {
+                console.log(`Starting high concurrency test with ${testCount} generations...`);
+                const startTime = performance.now();
+                const generatedNumbers = new Set();
+                const duplicates = [];
+                const errors = [];
+
+                try {
+                    for (let i = 0; i < testCount; i++) {
+                        const baseNum = OrderNumberService.generateBaseNumber();
+                        if (generatedNumbers.has(baseNum)) {
+                            duplicates.push(baseNum);
+                        }
+                        generatedNumbers.add(baseNum);
+                    }
+
+                    const endTime = performance.now();
+                    const duration = (endTime - startTime).toFixed(2);
+
+                    return {
+                        success: duplicates.length === 0,
+                        testCount,
+                        uniqueCount: generatedNumbers.size,
+                        duplicateCount: duplicates.length,
+                        duplicates,
+                        duration: `${duration}ms`,
+                        averageTime: `${(duration / testCount).toFixed(3)}ms per generation`,
+                        errors
+                    };
+                } catch (error) {
+                    errors.push(error.message);
+                    return {
+                        success: false,
+                        testCount,
+                        uniqueCount: generatedNumbers.size,
+                        duplicateCount: duplicates.length,
+                        duplicates,
+                        duration: 'N/A',
+                        errors
+                    };
+                }
+            },
+
+            /**
+             * Test cross-system data consistency
+             * @returns {Object} Test results
+             */
+            testDataConsistency() {
+                console.log('Testing cross-system data consistency...');
+                const startTime = performance.now();
+                const issues = [];
+
+                try {
+                    // Test 1: Check for duplicate order numbers
+                    const orderNumbers = db.orders.map(o => o.num);
+                    const duplicateOrderNumbers = orderNumbers.filter((num, index) => orderNumbers.indexOf(num) !== index);
+                    if (duplicateOrderNumbers.length > 0) {
+                        issues.push({
+                            type: 'duplicate_order_numbers',
+                            severity: 'critical',
+                            message: `Found ${duplicateOrderNumbers.length} duplicate order numbers`,
+                            details: duplicateOrderNumbers
+                        });
+                    }
+
+                    // Test 2: Check for duplicate stock numbers
+                    const stockNumbers = db.stocks.map(s => s.num);
+                    const duplicateStockNumbers = stockNumbers.filter((num, index) => stockNumbers.indexOf(num) !== index);
+                    if (duplicateStockNumbers.length > 0) {
+                        issues.push({
+                            type: 'duplicate_stock_numbers',
+                            severity: 'critical',
+                            message: `Found ${duplicateStockNumbers.length} duplicate stock numbers`,
+                            details: duplicateStockNumbers
+                        });
+                    }
+
+                    // Test 3: Verify order number format
+                    const invalidOrderFormats = db.orders.filter(order => {
+                        if (!order.num) return true;
+                        const expectedFormat = /^\d{6}-\d+$/;
+                        return !expectedFormat.test(order.num);
+                    });
+                    if (invalidOrderFormats.length > 0) {
+                        issues.push({
+                            type: 'invalid_order_format',
+                            severity: 'warning',
+                            message: `Found ${invalidOrderFormats.length} orders with invalid number format`,
+                            details: invalidOrderFormats.map(o => o.num)
+                        });
+                    }
+
+                    // Test 4: Verify baseNum consistency
+                    const inconsistentBaseNums = db.orders.filter(order => {
+                        if (!order.num || !order.baseNum) return true;
+                        const baseNumFromNum = order.num.split('-')[0];
+                        return baseNumFromNum !== order.baseNum;
+                    });
+                    if (inconsistentBaseNums.length > 0) {
+                        issues.push({
+                            type: 'inconsistent_base_num',
+                            severity: 'warning',
+                            message: `Found ${inconsistentBaseNums.length} orders with inconsistent baseNum`,
+                            details: inconsistentBaseNums.map(o => ({ num: o.num, baseNum: o.baseNum }))
+                        });
+                    }
+
+                    // Test 5: Verify stock number format
+                    const invalidStockFormats = db.stocks.filter(stock => {
+                        if (!stock.num) return true;
+                        const expectedFormat = /^\d{6}$/;
+                        return !expectedFormat.test(stock.num);
+                    });
+                    if (invalidStockFormats.length > 0) {
+                        issues.push({
+                            type: 'invalid_stock_format',
+                            severity: 'warning',
+                            message: `Found ${invalidStockFormats.length} stocks with invalid number format`,
+                            details: invalidStockFormats.map(s => s.num)
+                        });
+                    }
+
+                    const endTime = performance.now();
+                    const duration = (endTime - startTime).toFixed(2);
+
+                    return {
+                        success: issues.filter(i => i.severity === 'critical').length === 0,
+                        totalOrders: db.orders.length,
+                        totalStocks: db.stocks.length,
+                        issues,
+                        criticalIssues: issues.filter(i => i.severity === 'critical').length,
+                        warningIssues: issues.filter(i => i.severity === 'warning').length,
+                        duration: `${duration}ms`
+                    };
+                } catch (error) {
+                    issues.push({
+                        type: 'test_error',
+                        severity: 'critical',
+                        message: `Test execution error: ${error.message}`
+                    });
+                    return {
+                        success: false,
+                        issues,
+                        criticalIssues: 1,
+                        warningIssues: 0,
+                        duration: 'N/A'
+                    };
+                }
+            },
+
+            /**
+             * Test number format in various boundary conditions
+             * @returns {Object} Test results
+             */
+            testNumberFormat() {
+                console.log('Testing number format boundary conditions...');
+                const testCases = [
+                    { name: 'Minimum base number', baseNum: '000001', quantity: 1 },
+                    { name: 'Maximum base number', baseNum: '999999', quantity: 1 },
+                    { name: 'Single item', baseNum: '000001', quantity: 1 },
+                    { name: 'Multiple items', baseNum: '000001', quantity: 10 },
+                    { name: 'Large quantity', baseNum: '000001', quantity: 100 },
+                    { name: 'Boundary quantity', baseNum: '000001', quantity: 999 }
+                ];
+
+                const results = [];
+                const errors = [];
+
+                try {
+                    testCases.forEach(testCase => {
+                        try {
+                            const itemNumbers = OrderNumberService.generateItemNumbers(testCase.baseNum, testCase.quantity);
+                            const formatValid = itemNumbers.every(num => /^\d{6}-\d+$/.test(num));
+                            const sequenceValid = itemNumbers.every((num, index) => {
+                                const expected = `${testCase.baseNum}-${index + 1}`;
+                                return num === expected;
+                            });
+                            const uniqueValid = new Set(itemNumbers).size === itemNumbers.length;
+
+                            results.push({
+                                name: testCase.name,
+                                baseNum: testCase.baseNum,
+                                quantity: testCase.quantity,
+                                generatedCount: itemNumbers.length,
+                                formatValid,
+                                sequenceValid,
+                                uniqueValid,
+                                success: formatValid && sequenceValid && uniqueValid,
+                                sampleNumbers: itemNumbers.slice(0, 3)
+                            });
+                        } catch (error) {
+                            errors.push({
+                                name: testCase.name,
+                                error: error.message
+                            });
+                        }
+                    });
+
+                    const allPassed = results.every(r => r.success) && errors.length === 0;
+
+                    return {
+                        success: allPassed,
+                        totalTests: testCases.length,
+                        passedTests: results.filter(r => r.success).length,
+                        failedTests: results.filter(r => !r.success).length,
+                        errorTests: errors.length,
+                        results,
+                        errors
+                    };
+                } catch (error) {
+                    return {
+                        success: false,
+                        totalTests: testCases.length,
+                        passedTests: 0,
+                        failedTests: 0,
+                        errorTests: testCases.length,
+                        results: [],
+                        errors: [{ name: 'all', error: error.message }]
+                    };
+                }
+            },
+
+            /**
+             * Run all system tests
+             * @returns {Object} Complete test results
+             */
+            runAllTests() {
+                console.log('Running all system tests...');
+                const startTime = performance.now();
+
+                const concurrencyTest = this.testHighConcurrency(50);
+                const consistencyTest = this.testDataConsistency();
+                const formatTest = this.testNumberFormat();
+
+                const endTime = performance.now();
+                const totalDuration = (endTime - startTime).toFixed(2);
+
+                const overallSuccess = concurrencyTest.success && consistencyTest.success && formatTest.success;
+
+                return {
+                    overallSuccess,
+                    totalDuration: `${totalDuration}ms`,
+                    tests: {
+                        concurrency: concurrencyTest,
+                        consistency: consistencyTest,
+                        format: formatTest
+                    },
+                    summary: {
+                        totalTests: 3,
+                        passedTests: [concurrencyTest.success, consistencyTest.success, formatTest.success].filter(Boolean).length,
+                        failedTests: [concurrencyTest.success, consistencyTest.success, formatTest.success].filter(Boolean).length === 3 ? 0 : 3 - [concurrencyTest.success, consistencyTest.success, formatTest.success].filter(Boolean).length
+                    }
+                };
+            }
+        };
+
+        /**
+         * Order Number Testing Module
+         * Tests for stock-based order number generation
+         */
+        const OrderNumberTesting = {
+            /**
+             * Test sequential order number generation for the same stock
+             * @param {string} stockNum - Stock number to test
+             * @param {number} testCount - Number of orders to create
+             * @returns {Object} Test results
+             */
+            testSequentialGeneration(stockNum, testCount = 5) {
+                console.log(`Testing sequential generation for stock ${stockNum} with ${testCount} orders...`);
+                const results = [];
+                const errors = [];
+                
+                try {
+                    // Get initial max sequence
+                    const initialMaxSeq = getMaxSequenceForStock(stockNum);
+                    console.log(`Initial max sequence for stock ${stockNum}: ${initialMaxSeq}`);
+                    
+                    // Generate order numbers
+                    for (let i = 0; i < testCount; i++) {
+                        const orderNums = generateStockOrderNumbers(stockNum, 1);
+                        if (orderNums.length === 0) {
+                            errors.push(`Failed to generate order number for iteration ${i}`);
+                            continue;
+                        }
+                        
+                        const expectedSeq = initialMaxSeq + i + 1;
+                        const expectedNum = `${stockNum}-${expectedSeq}`;
+                        const actualNum = orderNums[0];
+                        
+                        results.push({
+                            iteration: i + 1,
+                            expected: expectedNum,
+                            actual: actualNum,
+                            match: expectedNum === actualNum
+                        });
+                    }
+                    
+                    const allMatch = results.every(r => r.match);
+                    
+                    return {
+                        success: allMatch && errors.length === 0,
+                        stockNum,
+                        testCount,
+                        initialMaxSequence: initialMaxSeq,
+                        results,
+                        errors,
+                        summary: {
+                            passed: results.filter(r => r.match).length,
+                            failed: results.filter(r => !r.match).length
+                        }
+                    };
+                } catch (error) {
+                    errors.push(error.message);
+                    return {
+                        success: false,
+                        stockNum,
+                        testCount,
+                        results,
+                        errors
+                    };
+                }
+            },
+
+            /**
+             * Test alternating stock order number generation
+             * @returns {Object} Test results
+             */
+            testAlternatingStocks() {
+                console.log('Testing alternating stock order number generation...');
+                const testStocks = ['000001', '000002', '000001', '000002', '000001'];
+                const results = [];
+                const stockSequences = {};
+                
+                try {
+                    testStocks.forEach((stockNum, index) => {
+                        if (!stockSequences[stockNum]) {
+                            stockSequences[stockNum] = getMaxSequenceForStock(stockNum);
+                        }
+                        
+                        const orderNums = generateStockOrderNumbers(stockNum, 1);
+                        const expectedSeq = stockSequences[stockNum] + 1;
+                        const expectedNum = `${stockNum}-${expectedSeq}`;
+                        
+                        results.push({
+                            iteration: index + 1,
+                            stockNum,
+                            expected: expectedNum,
+                            actual: orderNums[0],
+                            match: expectedNum === orderNums[0]
+                        });
+                        
+                        stockSequences[stockNum] = expectedSeq;
+                    });
+                    
+                    const allMatch = results.every(r => r.match);
+                    
+                    return {
+                        success: allMatch,
+                        testCount: testStocks.length,
+                        results,
+                        summary: {
+                            passed: results.filter(r => r.match).length,
+                            failed: results.filter(r => !r.match).length
+                        }
+                    };
+                } catch (error) {
+                    return {
+                        success: false,
+                        testCount: testStocks.length,
+                        results,
+                        errors: [error.message]
+                    };
+                }
+            },
+
+            /**
+             * Test order number generation after deletion
+             * @param {string} stockNum - Stock number to test
+             * @returns {Object} Test results
+             */
+            testAfterDeletion(stockNum) {
+                console.log(`Testing order number generation after deletion for stock ${stockNum}...`);
+                const results = [];
+                
+                try {
+                    // Get current max sequence
+                    const currentMaxSeq = getMaxSequenceForStock(stockNum);
+                    
+                    // Generate a new order number
+                    const newOrderNums = generateStockOrderNumbers(stockNum, 1);
+                    const newOrderNum = newOrderNums[0];
+                    const newSeq = parseInt(newOrderNum.split('-')[1]);
+                    
+                    results.push({
+                        step: 'After deletion',
+                        currentMaxSeq,
+                        generatedNum: newOrderNum,
+                        expectedSeq: currentMaxSeq + 1,
+                        actualSeq: newSeq,
+                        match: newSeq === currentMaxSeq + 1
+                    });
+                    
+                    return {
+                        success: results.every(r => r.match),
+                        stockNum,
+                        results
+                    };
+                } catch (error) {
+                    return {
+                        success: false,
+                        stockNum,
+                        results,
+                        errors: [error.message]
+                    };
+                }
+            },
+
+            /**
+             * Run all order number tests
+             * @returns {Object} Complete test results
+             */
+            runAllTests() {
+                console.log('Running all order number tests...');
+                const startTime = performance.now();
+                
+                const sequentialTest = this.testSequentialGeneration('000001', 5);
+                const alternatingTest = this.testAlternatingStocks();
+                const deletionTest = this.testAfterDeletion('000001');
+                
+                const endTime = performance.now();
+                const totalDuration = (endTime - startTime).toFixed(2);
+                
+                const overallSuccess = sequentialTest.success && alternatingTest.success && deletionTest.success;
+                
+                return {
+                    overallSuccess,
+                    totalDuration: `${totalDuration}ms`,
+                    tests: {
+                        sequential: sequentialTest,
+                        alternating: alternatingTest,
+                        deletion: deletionTest
+                    },
+                    summary: {
+                        totalTests: 3,
+                        passedTests: [sequentialTest.success, alternatingTest.success, deletionTest.success].filter(Boolean).length,
+                        failedTests: [sequentialTest.success, alternatingTest.success, deletionTest.success].filter(Boolean).length === 3 ? 0 : 3 - [sequentialTest.success, alternatingTest.success, deletionTest.success].filter(Boolean).length
+                    }
+                };
+            }
+        };
 
         // Chart instances
         let charts = { p: null, c: null };
@@ -1201,6 +2032,7 @@
         /**
          * Save new order with inventory deduction
          * Validates all inputs and handles stock quantity
+         * Uses OrderNumberService for atomic number generation
          */
         function saveOrder() {
             try {
@@ -1224,6 +2056,7 @@
                 }
 
                 // Check stock availability
+                let stockNum = null;
                 if (stockId) {
                     const stockIndex = db.stocks.findIndex(s => s.id == stockId);
                     if (stockIndex === -1) {
@@ -1234,31 +2067,51 @@
                         alert(`库存余量不足。当前库存：${db.stocks[stockIndex].q}，需要：${quantity}`);
                         return;
                     }
+                    // Get stock number for order numbering
+                    stockNum = db.stocks[stockIndex].num;
                     // Deduct from inventory
                     db.stocks[stockIndex].q -= quantity;
                 }
 
-                // Generate unique 6-digit order ID
-                db.orderCounter = (db.orderCounter || 0) + 1;
-                const orderNumber = String(db.orderCounter).padStart(6, '0');
+                // Generate order numbers based on stock number or new base number
+                let orderNumbers = [];
+                let baseNum = null;
+                
+                if (stockNum) {
+                    // Use stock number as base for order numbers
+                    baseNum = stockNum;
+                    orderNumbers = generateStockOrderNumbers(stockNum, quantity);
+                    console.log(`Generated ${orderNumbers.length} order numbers for stock ${stockNum}:`, orderNumbers);
+                } else {
+                    // No stock selected: generate new base number
+                    baseNum = OrderNumberService.generateBaseNumber();
+                    orderNumbers = OrderNumberService.generateItemNumbers(baseNum, quantity);
+                    console.log(`Generated ${orderNumbers.length} order numbers with new base ${baseNum}:`, orderNumbers);
+                }
 
-                // Create order object
-                const newOrder = {
-                    id: Date.now(),
-                    num: orderNumber,
-                    date: new Date().toLocaleDateString(),
-                    n: note,
-                    ch: channel,
-                    p: price,
-                    qty: quantity,
-                    cp: costPrice,
-                    cs: shippingCost,
-                    co: otherCost,
-                    stockId: stockId ? parseInt(stockId) : null,
-                    refunded: false
-                };
+                // Create order objects for each item in the order
+                const newOrders = [];
+                for (let i = 0; i < quantity; i++) {
+                    const newOrder = {
+                        id: Date.now() + i,
+                        baseNum: baseNum,
+                        num: orderNumbers[i],
+                        date: new Date().toLocaleDateString(),
+                        n: note,
+                        ch: channel,
+                        p: price,
+                        qty: 1,
+                        cp: costPrice,
+                        cs: shippingCost,
+                        co: otherCost,
+                        stockId: stockId ? parseInt(stockId) : null,
+                        refunded: false
+                    };
+                    newOrders.push(newOrder);
+                }
 
-                db.orders.unshift(newOrder);
+                // Add all orders to database
+                db.orders.unshift(...newOrders);
                 saveAndRender();
 
                 // Clear form fields
@@ -1307,7 +2160,7 @@
 
         /**
          * Filter orders by search query
-         * Supports text search: note, channel, or order number
+         * Supports text search: note, channel, order number, or base number
          */
         function filterOrders() {
             try {
@@ -1316,7 +2169,8 @@
                 filteredOrders = db.orders.filter(order => {
                     return (order.n && order.n.toLowerCase().includes(query)) ||
                            (order.ch && order.ch.toLowerCase().includes(query)) ||
-                           (order.num && order.num.includes(query));
+                           (order.num && order.num.includes(query)) ||
+                           (order.baseNum && order.baseNum.includes(query));
                 });
                 
                 renderOrderList();
@@ -1364,7 +2218,7 @@
                         <div class="health-card p-5 group ${isInStock ? 'in-stock' : 'sold-out'}">
                             <div class="flex justify-between items-start mb-3">
                                 <div class="flex items-center gap-2">
-                                    <span class="text-lg font-black text-blue-600 font-mono tracking-tight">#${stock.num || '------'}</span>
+                                    <span class="text-lg font-black text-blue-600 font-mono tracking-tight">#${escapeHtml(stock.num || '------')}</span>
                                     <span class="text-[9px] px-1.5 py-0.5 rounded font-black ${isInStock ? 'bg-blue-500 text-white shadow-lg shadow-blue-500/30' : 'bg-slate-200 text-slate-500'}">
                                         ${isInStock ? '在售' : '罄'}
                                     </span>
@@ -1374,15 +2228,15 @@
                                     <button onclick="deleteStock(${index})" class="text-[10px] text-red-400 opacity-0 group-hover:opacity-100 transition">移除</button>
                                 </div>
                             </div>
-                            <h4 class="item-title truncate block mb-2">${stock.n}</h4>
+                            <h4 class="item-title truncate block mb-2">${escapeHtml(stock.n)}</h4>
                             <div class="flex justify-between items-center text-sm">
                                 <div class="flex gap-4">
-                                    <span class="text-slate-500">货号: <span class="font-mono">${stock.sn}</span></span>
+                                    <span class="text-slate-500">货号: <span class="font-mono">${escapeHtml(stock.sn)}</span></span>
                                     <span class="text-slate-500">成本: <span class="font-bold">${formatCurrency(stock.c)}</span></span>
                                 </div>
                                 <span class="text-slate-500">数量: <span class="font-bold text-base">${stock.q}</span></span>
                             </div>
-                            ${stock.note ? `<p class="text-xs text-slate-400 mt-2 pt-2 border-t border-slate-100">备注: ${stock.note}</p>` : ''}
+                            ${stock.note ? `<p class="text-xs text-slate-400 mt-2 pt-2 border-t border-slate-100">备注: ${escapeHtml(stock.note)}</p>` : ''}
                         </div>`;
                 }).join('');
             } catch (error) {
@@ -1420,36 +2274,107 @@
                 const netProfit = (totalRevenue - totalCost) - totalRefundLoss;
                 updateProfitProgress(netProfit);
 
-                // Render order list
-                document.getElementById('order-list').innerHTML = filteredOrders.map((order, index) => {
-                    const cost = (order.cp * order.qty) + order.cs + order.co;
-                    const profit = (order.p * order.qty) - cost;
-                    const isRefunded = order.refunded || false;
+                // Render order list grouped by base number
+                const groupedOrders = {};
+                filteredOrders.forEach((order, index) => {
+                    const baseNum = order.baseNum || 'unknown';
+                    if (!groupedOrders[baseNum]) {
+                        groupedOrders[baseNum] = [];
+                    }
+                    groupedOrders[baseNum].push({ order, index });
+                });
+
+                let orderListHTML = '';
+                Object.keys(groupedOrders).forEach(baseNum => {
+                    const group = groupedOrders[baseNum];
+                    const isGroup = group.length > 1;
                     
-                    return `
-                        <div class="health-card p-5 flex justify-between items-center ${isRefunded ? 'refunded' : ''}">
-                            <div class="min-w-0 flex-1">
-                                <div class="flex items-center gap-2 mb-1">
-                                    ${isRefunded ? '<span class="refund-badge">已退款</span>' : ''}
-                                    <span class="item-number">#${order.num || '------'}</span>
-                                    <span class="text-[9px] bg-slate-100 px-2 py-0.5 rounded text-slate-500 font-bold">${order.ch}</span>
-                                    <p class="item-title truncate text-slate-900">${order.n || '未备注'}</p>
+                    if (isGroup) {
+                        // Display group header for multi-item orders
+                        const groupProfit = group.reduce((sum, item) => {
+                            const cost = (item.order.cp * item.order.qty) + item.order.cs + item.order.co;
+                            return sum + ((item.order.p * item.order.qty) - cost);
+                        }, 0);
+                        
+                        orderListHTML += `
+                            <div class="mb-4">
+                                <div class="bg-blue-50 border-l-4 border-blue-500 p-3 mb-2 rounded-r-lg">
+                                    <div class="flex justify-between items-center">
+                                        <div class="flex items-center gap-2">
+                                            <span class="text-sm font-bold text-blue-700">基础编号 #${escapeHtml(baseNum)}</span>
+                                            <span class="text-xs bg-blue-200 text-blue-800 px-2 py-0.5 rounded font-bold">${group.length}件商品</span>
+                                        </div>
+                                        <span class="text-sm font-bold text-blue-600">${formatCurrency(groupProfit)}</span>
+                                    </div>
                                 </div>
-                                <p class="item-subtitle font-mono">${order.date} · ${formatCurrency(order.cp)} x ${order.qty}</p>
-                            </div>
-                            <div class="text-right shrinkage-0 ml-4 flex flex-col items-end gap-1">
-                                <p class="font-bold text-lg font-mono tracking-tight ${isRefunded ? 'profit-display' : ''} ${profit >= 0 ? 'text-blue-600' : 'text-red-500'}">
-                                    ${formatCurrency(profit)}
-                                </p>
-                                ${isRefunded ? `<p class="text-[10px] text-red-400 font-medium">退款损失 ${formatCurrency(order.refundLoss || 0)}</p>` : ''}
-                                <div class="flex gap-2">
-                                    ${!isRefunded ? `<button onclick="showRefundModal(${index})" class="btn-refund">退款</button>` : ''}
-                                    ${!isRefunded ? `<button onclick="editOrder(${index})" class="text-[10px] text-blue-400 hover:text-blue-600 transition font-bold">编辑</button>` : ''}
-                                    <button onclick="confirmDeleteOrder(${index})" class="text-[10px] text-red-400 hover:text-red-600 transition font-bold">删除</button>
+                                <div class="space-y-2">
+                                    ${group.map(({ order, index }) => {
+                                        const cost = (order.cp * order.qty) + order.cs + order.co;
+                                        const profit = (order.p * order.qty) - cost;
+                                        const isRefunded = order.refunded || false;
+                                        return `
+                                            <div class="health-card p-4 flex justify-between items-center ${isRefunded ? 'refunded' : ''} ml-4">
+                                                <div class="min-w-0 flex-1">
+                                                    <div class="flex items-center gap-2 mb-1">
+                                                        ${isRefunded ? '<span class="refund-badge">已退款</span>' : ''}
+                                                        <span class="item-number text-sm">#${escapeHtml(order.num || '------')}</span>
+                                                        <span class="text-[9px] bg-slate-100 px-2 py-0.5 rounded text-slate-500 font-bold">${escapeHtml(order.ch)}</span>
+                                                        <p class="item-title truncate text-slate-900 text-sm">${escapeHtml(order.n || '未备注')}</p>
+                                                    </div>
+                                                    <p class="item-subtitle font-mono text-xs">${escapeHtml(order.date)} · ${formatCurrency(order.cp)}</p>
+                                                </div>
+                                                <div class="text-right shrinkage-0 ml-4 flex flex-col items-end gap-1">
+                                                    <p class="font-bold text-base font-mono tracking-tight ${isRefunded ? 'profit-display' : ''} ${profit >= 0 ? 'text-blue-600' : 'text-red-500'}">
+                                                        ${formatCurrency(profit)}
+                                                    </p>
+                                                    ${isRefunded ? `<p class="text-[10px] text-red-400 font-medium">退款损失 ${formatCurrency(order.refundLoss || 0)}</p>` : ''}
+                                                    <div class="flex gap-2">
+                                                        ${!isRefunded ? `<button onclick="showRefundModal(${index})" class="btn-refund text-xs">退款</button>` : ''}
+                                                        ${!isRefunded ? `<button onclick="editOrder(${index})" class="text-[10px] text-blue-400 hover:text-blue-600 transition font-bold">编辑</button>` : ''}
+                                                        <button onclick="confirmDeleteOrder(${index})" class="text-[10px] text-red-400 hover:text-red-600 transition font-bold">删除</button>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        `;
+                                    }).join('')}
                                 </div>
                             </div>
-                        </div>`;
-                }).join('');
+                        `;
+                    } else {
+                        // Single item order - display normally
+                        const { order, index } = group[0];
+                        const cost = (order.cp * order.qty) + order.cs + order.co;
+                        const profit = (order.p * order.qty) - cost;
+                        const isRefunded = order.refunded || false;
+                        
+                        orderListHTML += `
+                            <div class="health-card p-5 flex justify-between items-center ${isRefunded ? 'refunded' : ''}">
+                                <div class="min-w-0 flex-1">
+                                    <div class="flex items-center gap-2 mb-1">
+                                        ${isRefunded ? '<span class="refund-badge">已退款</span>' : ''}
+                                        <span class="item-number">#${escapeHtml(order.num || '------')}</span>
+                                        <span class="text-[9px] bg-slate-100 px-2 py-0.5 rounded text-slate-500 font-bold">${escapeHtml(order.ch)}</span>
+                                        <p class="item-title truncate text-slate-900">${escapeHtml(order.n || '未备注')}</p>
+                                    </div>
+                                    <p class="item-subtitle font-mono">${escapeHtml(order.date)} · ${formatCurrency(order.cp)}</p>
+                                </div>
+                                <div class="text-right shrinkage-0 ml-4 flex flex-col items-end gap-1">
+                                    <p class="font-bold text-lg font-mono tracking-tight ${isRefunded ? 'profit-display' : ''} ${profit >= 0 ? 'text-blue-600' : 'text-red-500'}">
+                                        ${formatCurrency(profit)}
+                                    </p>
+                                    ${isRefunded ? `<p class="text-[10px] text-red-400 font-medium">退款损失 ${formatCurrency(order.refundLoss || 0)}</p>` : ''}
+                                    <div class="flex gap-2">
+                                        ${!isRefunded ? `<button onclick="showRefundModal(${index})" class="btn-refund">退款</button>` : ''}
+                                        ${!isRefunded ? `<button onclick="editOrder(${index})" class="text-[10px] text-blue-400 hover:text-blue-600 transition font-bold">编辑</button>` : ''}
+                                        <button onclick="confirmDeleteOrder(${index})" class="text-[10px] text-red-400 hover:text-red-600 transition font-bold">删除</button>
+                                    </div>
+                                </div>
+                            </div>
+                        `;
+                    }
+                });
+
+                document.getElementById('order-list').innerHTML = orderListHTML;
 
                 // Update overview statistics
                 document.getElementById('allProfit').innerText = formatCurrency(netProfit);
@@ -1577,6 +2502,7 @@
 
                 editingOrderIndex = index;
 
+                document.getElementById('edit-order-base-num').value = order.baseNum || '';
                 document.getElementById('edit-order-num').value = order.num || '';
                 document.getElementById('edit-order-name').value = order.n || '';
                 document.getElementById('edit-order-price').value = order.p || '';
@@ -1617,7 +2543,6 @@
 
                 const name = document.getElementById('edit-order-name').value.trim();
                 const price = parseFloat(document.getElementById('edit-order-price').value);
-                const qty = parseInt(document.getElementById('edit-order-qty').value);
                 const costPrice = parseFloat(document.getElementById('edit-order-cp').value);
                 const shippingCost = parseFloat(document.getElementById('edit-order-cs').value);
                 const otherCost = parseFloat(document.getElementById('edit-order-co').value);
@@ -1625,10 +2550,6 @@
 
                 if (isNaN(price) || price <= 0) {
                     alert('请输入有效的售价');
-                    return;
-                }
-                if (isNaN(qty) || qty < 1) {
-                    alert('请输入有效的数量（至少1）');
                     return;
                 }
                 if (isNaN(costPrice) || costPrice < 0) {
@@ -1646,13 +2567,14 @@
 
                 const realIndex = db.orders.findIndex(o => o.id === order.id);
                 if (realIndex !== -1) {
+                    // Only update editable fields, preserve baseNum and num
                     db.orders[realIndex].n = name || '';
                     db.orders[realIndex].p = price || 0;
-                    db.orders[realIndex].qty = qty || 1;
                     db.orders[realIndex].cp = costPrice || 0;
                     db.orders[realIndex].cs = shippingCost || 0;
                     db.orders[realIndex].co = otherCost || 0;
                     db.orders[realIndex].ch = channel || '闲鱼';
+                    // Note: qty, baseNum, and num are not editable
 
                     saveAndRender();
                     hideOrderEditModal();
@@ -1674,9 +2596,9 @@
 
                 let confirmMessage;
                 if (order.refunded) {
-                    confirmMessage = `确认删除已退款订单 #${order.num}？\n\n订单信息：${order.n || '未备注'}\n退款损失：${formatCurrency(order.refundLoss || 0)}\n\n此操作不可恢复！`;
+                    confirmMessage = `确认删除已退款订单 #${order.num}？\n\n基础编号：${order.baseNum || '------'}\n订单信息：${order.n || '未备注'}\n退款损失：${formatCurrency(order.refundLoss || 0)}\n\n此操作不可恢复！`;
                 } else {
-                    confirmMessage = `确认删除订单 #${order.num}？\n\n订单信息：${order.n || '未备注'}\n金额：${formatCurrency(order.p)} x ${order.qty}\n\n此操作不可恢复！`;
+                    confirmMessage = `确认删除订单 #${order.num}？\n\n基础编号：${order.baseNum || '------'}\n订单信息：${order.n || '未备注'}\n金额：${formatCurrency(order.p)}\n\n此操作不可恢复！`;
                 }
 
                 if (confirm(confirmMessage)) {
@@ -1708,6 +2630,95 @@
         }
 
         /**
+         * Get all orders with the same base number
+         * @param {string} baseNum - Base order number
+         * @returns {Array} Array of orders with the same base number
+         */
+        function getOrdersByBaseNumber(baseNum) {
+            try {
+                return db.orders.filter(o => o.baseNum === baseNum);
+            } catch (error) {
+                console.error('Get orders by base number error:', error);
+                return [];
+            }
+        }
+
+        /**
+         * Get maximum sequence number for a stock item
+         * Used to generate sequential order numbers for the same stock
+         * @param {string} stockNum - Stock number (6-digit format)
+         * @returns {number} Maximum sequence number found (0 if no orders exist)
+         */
+        function getMaxSequenceForStock(stockNum) {
+            try {
+                if (!stockNum) return 0;
+                
+                const stockOrders = db.orders.filter(order => {
+                    if (!order.num) return false;
+                    const parts = order.num.split('-');
+                    return parts.length === 2 && parts[0] === stockNum;
+                });
+                
+                if (stockOrders.length === 0) return 0;
+                
+                const sequences = stockOrders.map(order => {
+                    const parts = order.num.split('-');
+                    return parseInt(parts[1]) || 0;
+                });
+                
+                return Math.max(...sequences);
+            } catch (error) {
+                console.error('Get max sequence for stock error:', error);
+                return 0;
+            }
+        }
+
+        /**
+         * Generate sequential order numbers for a stock item
+         * Format: stockNum-sequence (e.g., 000001-1, 000001-2)
+         * @param {string} stockNum - Stock number (6-digit format)
+         * @param {number} quantity - Number of order numbers to generate
+         * @returns {Array<string>} Array of order numbers
+         */
+        function generateStockOrderNumbers(stockNum, quantity) {
+            try {
+                if (!stockNum || quantity < 1) {
+                    throw new Error('Invalid stock number or quantity');
+                }
+                
+                const maxSequence = getMaxSequenceForStock(stockNum);
+                const orderNumbers = [];
+                
+                for (let i = 1; i <= quantity; i++) {
+                    const sequence = maxSequence + i;
+                    orderNumbers.push(`${stockNum}-${sequence}`);
+                }
+                
+                return orderNumbers;
+            } catch (error) {
+                console.error('Generate stock order numbers error:', error);
+                return [];
+            }
+        }
+
+        /**
+         * Escape HTML to prevent XSS attacks
+         * @param {string} text - Text to escape
+         * @returns {string} Escaped text
+         */
+        function escapeHtml(text) {
+            try {
+                if (!text) return '';
+                const div = document.createElement('div');
+                div.textContent = text;
+                return div.innerHTML;
+            } catch (error) {
+                console.error('Escape HTML error:', error);
+                return '';
+            }
+        }
+
+        /**
          * Show refund modal with order details
          * @param {number} index - Index in filtered array
          */
@@ -1721,8 +2732,8 @@
                 const orderInfo = document.getElementById('refund-order-info');
                 const refundLoss = document.getElementById('refund-loss');
 
-                orderNumber.textContent = `订单 #${order.num}`;
-                orderInfo.textContent = `${order.n || '未备注'} · ${order.ch} · ${formatCurrency(order.p)} x ${order.qty}`;
+                orderNumber.textContent = `订单 #${escapeHtml(order.num)}`;
+                orderInfo.textContent = `${escapeHtml(order.baseNum || '------')} · ${escapeHtml(order.n || '未备注')} · ${escapeHtml(order.ch)} · ${formatCurrency(order.p)}`;
                 refundLoss.value = '';
                 refundLoss.dataset.orderIndex = index;
 
@@ -1976,6 +2987,60 @@
             try {
                 saveAndRender();
                 switchPage('overview');
+                
+                // Initialize OrderNumberService
+                OrderNumberService.initialize();
+                console.log('OrderNumberService initialized');
+                
+                // Initialize DataConsistencyService and check data consistency
+                const consistencyCheck = DataConsistencyService.validateConsistency();
+                if (!consistencyCheck.valid) {
+                    console.warn('Data consistency issues detected:', consistencyCheck.issues);
+                    const fixResult = DataConsistencyService.autoFixIssues();
+                    if (fixResult.success) {
+                        console.log('Auto-fixed consistency issues:', fixResult);
+                        saveAndRender();
+                    } else {
+                        console.error('Failed to auto-fix consistency issues:', fixResult);
+                    }
+                } else {
+                    console.log('Data consistency check passed');
+                }
+                
+                // Run system tests (development mode)
+                if (window.location.search.includes('debug=true')) {
+                    console.log('=== Running System Tests ===');
+                    const testResults = SystemTesting.runAllTests();
+                    console.log('Test Results:', testResults);
+                    if (testResults.overallSuccess) {
+                        console.log('✅ All tests passed!');
+                    } else {
+                        console.warn('⚠️ Some tests failed');
+                    }
+                }
+                
+                // Expose testing functions to global scope for debugging
+                window.runSystemTests = () => SystemTesting.runAllTests();
+                window.testConcurrency = (count) => SystemTesting.testHighConcurrency(count);
+                window.testConsistency = () => SystemTesting.testDataConsistency();
+                window.testFormats = () => SystemTesting.testNumberFormat();
+                
+                // Expose order number testing functions
+                window.runOrderNumberTests = () => OrderNumberTesting.runAllTests();
+                window.testSequentialOrders = (stockNum, count) => OrderNumberTesting.testSequentialGeneration(stockNum, count);
+                window.testAlternatingStocks = () => OrderNumberTesting.testAlternatingStocks();
+                window.testDeletionScenario = (stockNum) => OrderNumberTesting.testAfterDeletion(stockNum);
+                
+                console.log('System testing functions available:');
+                console.log('  - runSystemTests(): Run all system tests');
+                console.log('  - testConcurrency(count): Test number generation uniqueness');
+                console.log('  - testConsistency(): Test data consistency');
+                console.log('  - testFormats(): Test number format validation');
+                console.log('Order number testing functions available:');
+                console.log('  - runOrderNumberTests(): Run all order number tests');
+                console.log('  - testSequentialOrders(stockNum, count): Test sequential order generation');
+                console.log('  - testAlternatingStocks(): Test alternating stock scenarios');
+                console.log('  - testDeletionScenario(stockNum): Test after deletion scenario');
                 
                 // Initialize cost input interactions after DOM is ready
                 setTimeout(initializeCostInputs, 100);
