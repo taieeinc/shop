@@ -622,6 +622,97 @@
             transform: scale(1.02);
             box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
         }
+        .order-edit-modal {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0, 0, 0, 0.5);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 10000;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s ease;
+        }
+        .order-edit-modal.show { 
+            opacity: 1;
+            pointer-events: auto;
+        }
+        .order-edit-modal-content {
+            background: white;
+            border-radius: 24px;
+            padding: 32px;
+            max-width: 500px;
+            width: 90%;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            transform: scale(0.9);
+            transition: transform 0.3s ease;
+        }
+        .order-edit-modal.show .order-edit-modal-content { transform: scale(1); }
+        .order-edit-modal-title {
+            font-size: 20px;
+            font-weight: 800;
+            color: #1e293b;
+            margin-bottom: 24px;
+        }
+        .order-edit-input-group {
+            margin-bottom: 16px;
+        }
+        .order-edit-input-group label {
+            display: block;
+            font-size: 13px;
+            font-weight: 600;
+            color: #64748b;
+            margin-bottom: 8px;
+        }
+        .order-edit-input-group input {
+            width: 100%;
+            padding: 12px 16px;
+            border: 1px solid #e5e7eb;
+            border-radius: 12px;
+            font-size: 14px;
+            transition: all 0.2s ease;
+        }
+        .order-edit-input-group input:focus {
+            border-color: #007AFF;
+            box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.1);
+            outline: none;
+        }
+        .order-edit-input-group input:disabled {
+            background: #f8fafc;
+            cursor: not-allowed;
+        }
+        .order-edit-buttons {
+            display: flex;
+            gap: 12px;
+            margin-top: 24px;
+        }
+        .order-edit-buttons button {
+            flex: 1;
+            padding: 14px 24px;
+            border-radius: 12px;
+            font-size: 14px;
+            font-weight: 700;
+            transition: all 0.2s ease;
+        }
+        .order-edit-buttons .btn-cancel {
+            background: linear-gradient(145deg, #f1f5f9 0%, #e2e8f0 100%);
+            color: #1e293b;
+            border: 1px solid #e5e7eb;
+        }
+        .order-edit-buttons .btn-cancel:hover {
+            background: linear-gradient(145deg, #e2e8f0 0%, #cbd5e1 100%);
+        }
+        .order-edit-buttons .btn-save {
+            background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+            color: white;
+            border: none;
+            box-shadow: 0 4px 15px rgba(59, 130, 246, 0.3);
+        }
+        .order-edit-buttons .btn-save:hover {
+            transform: scale(1.02);
+            box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+        }
 
         .profit-progress-container {
             width: 100%;
@@ -913,6 +1004,50 @@
         </div>
     </div>
 
+    <div id="order-edit-modal" class="order-edit-modal">
+        <div class="order-edit-modal-content">
+            <h3 class="order-edit-modal-title">✏️ 编辑订单信息</h3>
+            <div class="order-edit-input-group">
+                <label>编号</label>
+                <input id="edit-order-num" type="text" disabled class="bg-slate-50">
+            </div>
+            <div class="order-edit-input-group">
+                <label>订单备注</label>
+                <input id="edit-order-name" type="text" placeholder="订单备注">
+            </div>
+            <div class="order-edit-input-group">
+                <label>售价</label>
+                <input id="edit-order-price" type="number" placeholder="售价" step="0.01">
+            </div>
+            <div class="order-edit-input-group">
+                <label>数量</label>
+                <input id="edit-order-qty" type="number" placeholder="数量">
+            </div>
+            <div class="order-edit-input-group">
+                <label>成本</label>
+                <input id="edit-order-cp" type="number" placeholder="成本" step="0.01">
+            </div>
+            <div class="order-edit-input-group">
+                <label>快递</label>
+                <input id="edit-order-cs" type="number" placeholder="快递" step="0.01">
+            </div>
+            <div class="order-edit-input-group">
+                <label>其它</label>
+                <input id="edit-order-co" type="number" placeholder="其它" step="0.01">
+            </div>
+            <div class="order-edit-input-group">
+                <label>渠道</label>
+                <select id="edit-order-ch" class="apple-input">
+                    <option>闲鱼</option><option>拼多多</option><option>淘宝</option><option>私域</option><option>得物</option>
+                </select>
+            </div>
+            <div class="order-edit-buttons">
+                <button onclick="hideOrderEditModal()" class="btn-cancel">取消</button>
+                <button onclick="saveOrderEdit()" class="btn-save">保存修改</button>
+            </div>
+        </div>
+    </div>
+
     <script>
         /**
          * Business Health Management System
@@ -943,6 +1078,9 @@
         
         // Current editing stock index
         let editingStockIndex = -1;
+        
+        // Current editing order index
+        let editingOrderIndex = -1;
 
         /**
          * Format currency value with consistent decimal places
@@ -1306,6 +1444,7 @@
                                 ${isRefunded ? `<p class="text-[10px] text-red-400 font-medium">退款损失 ${formatCurrency(order.refundLoss || 0)}</p>` : ''}
                                 <div class="flex gap-2">
                                     ${!isRefunded ? `<button onclick="showRefundModal(${index})" class="btn-refund">退款</button>` : ''}
+                                    ${!isRefunded ? `<button onclick="editOrder(${index})" class="text-[10px] text-blue-400 hover:text-blue-600 transition font-bold">编辑</button>` : ''}
                                     <button onclick="confirmDeleteOrder(${index})" class="text-[10px] text-red-400 hover:text-red-600 transition font-bold">删除</button>
                                 </div>
                             </div>
@@ -1424,6 +1563,103 @@
             } catch (error) {
                 console.error('Save stock edit error:', error);
                 alert('保存库存修改失败');
+            }
+        }
+
+        /**
+         * Show order edit modal with current data
+         * @param {number} index - Index in filtered array
+         */
+        function editOrder(index) {
+            try {
+                const order = filteredOrders[index];
+                if (!order) return;
+
+                editingOrderIndex = index;
+
+                document.getElementById('edit-order-num').value = order.num || '';
+                document.getElementById('edit-order-name').value = order.n || '';
+                document.getElementById('edit-order-price').value = order.p || '';
+                document.getElementById('edit-order-qty').value = order.qty || '';
+                document.getElementById('edit-order-cp').value = order.cp || '';
+                document.getElementById('edit-order-cs').value = order.cs || '';
+                document.getElementById('edit-order-co').value = order.co || '';
+                document.getElementById('edit-order-ch').value = order.ch || '闲鱼';
+
+                const modal = document.getElementById('order-edit-modal');
+                modal.classList.add('show');
+            } catch (error) {
+                console.error('Show order edit modal error:', error);
+            }
+        }
+
+        /**
+         * Hide order edit modal
+         */
+        function hideOrderEditModal() {
+            try {
+                document.getElementById('order-edit-modal').classList.remove('show');
+                editingOrderIndex = -1;
+            } catch (error) {
+                console.error('Hide order edit modal error:', error);
+            }
+        }
+
+        /**
+         * Save order edit changes
+         */
+        function saveOrderEdit() {
+            try {
+                if (editingOrderIndex === -1) return;
+
+                const order = filteredOrders[editingOrderIndex];
+                if (!order) return;
+
+                const name = document.getElementById('edit-order-name').value.trim();
+                const price = parseFloat(document.getElementById('edit-order-price').value);
+                const qty = parseInt(document.getElementById('edit-order-qty').value);
+                const costPrice = parseFloat(document.getElementById('edit-order-cp').value);
+                const shippingCost = parseFloat(document.getElementById('edit-order-cs').value);
+                const otherCost = parseFloat(document.getElementById('edit-order-co').value);
+                const channel = document.getElementById('edit-order-ch').value;
+
+                if (isNaN(price) || price <= 0) {
+                    alert('请输入有效的售价');
+                    return;
+                }
+                if (isNaN(qty) || qty < 1) {
+                    alert('请输入有效的数量（至少1）');
+                    return;
+                }
+                if (isNaN(costPrice) || costPrice < 0) {
+                    alert('请输入有效的成本金额');
+                    return;
+                }
+                if (isNaN(shippingCost) || shippingCost < 0) {
+                    alert('请输入有效的快递费用');
+                    return;
+                }
+                if (isNaN(otherCost) || otherCost < 0) {
+                    alert('请输入有效的其它费用');
+                    return;
+                }
+
+                const realIndex = db.orders.findIndex(o => o.id === order.id);
+                if (realIndex !== -1) {
+                    db.orders[realIndex].n = name || '';
+                    db.orders[realIndex].p = price || 0;
+                    db.orders[realIndex].qty = qty || 1;
+                    db.orders[realIndex].cp = costPrice || 0;
+                    db.orders[realIndex].cs = shippingCost || 0;
+                    db.orders[realIndex].co = otherCost || 0;
+                    db.orders[realIndex].ch = channel || '闲鱼';
+
+                    saveAndRender();
+                    hideOrderEditModal();
+                }
+            } catch (error) {
+                console.error('Save order edit error:', error);
+                alert('保存订单修改失败');
             }
         }
 
