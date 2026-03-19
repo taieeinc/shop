@@ -1059,7 +1059,7 @@
                 const stockSelect = document.getElementById('o-stock-sel');
                 stockSelect.innerHTML = '<option value="">从库选品 (自动同步进价)</option>' + 
                     db.stocks.filter(s => s.q > 0)
-                        .map(s => `<option value="${s.id}">${s.n} (余${s.q})</option>`)
+                        .map(s => `<option value="${s.id}">${s.n} [${s.sn}] (余${s.q})</option>`)
                         .join('');
                 
                 // Reset filters
