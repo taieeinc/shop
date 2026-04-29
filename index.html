@@ -967,6 +967,13 @@
                 <label>Gist ID (留空自动创建)</label>
                 <input id="gist-id" type="text" placeholder="首次使用留空，会自动创建" class="apple-input">
             </div>
+            <div class="refund-input-group" id="share-link-group" style="display: none;">
+                <label>🔗 分享配置链接（给新设备用）</label>
+                <div class="flex gap-2">
+                    <input id="share-link" type="text" readonly class="apple-input" style="flex: 1;" placeholder="配置好后会显示分享链接">
+                    <button onclick="copyShareLink()" class="apple-btn" style="white-space: nowrap;">📋 复制链接</button>
+                </div>
+            </div>
             <div class="refund-input-group">
                 <label>同步状态</label>
                 <div id="sync-status" class="text-sm text-slate-600 bg-slate-50 p-3 rounded-lg">
@@ -1161,6 +1168,10 @@
                     this.updateSyncStatus();
                     
                     showNotification('Gist 创建成功！', 'success');
+                    // 更新分享链接显示
+                    if (typeof updateShareLinkDisplay === 'function') {
+                        updateShareLinkDisplay();
+                    }
                     return { success: true, gistId: result.id };
                 } catch (error) {
                     console.error('Create gist error:', error);
@@ -1313,7 +1324,15 @@
         
         // Initialize cloud sync on page load
         (async () => {
+            // 先检查URL是否有配置参数
+            const hasUrlConfig = checkUrlForConfig();
+            // 初始化云同步服务
             await CloudSyncService.init();
+            // 如果有URL配置的话，自动打开设置面板提示用户
+            if (hasUrlConfig) {
+                // 延迟打开设置面板
+                setTimeout(() => toggleCloudSettings(), 500);
+            }
         })();
         
         // Cloud settings modal functions
@@ -1329,7 +1348,61 @@
                 gistIdInput.value = CloudSyncService.gistId;
             }
             
+            // 显示或隐藏分享链接区域
+            updateShareLinkDisplay();
+            
             modal.classList.toggle('show');
+        }
+        
+        // 更新分享链接显示
+        function updateShareLinkDisplay() {
+            const shareGroup = document.getElementById('share-link-group');
+            const shareLinkInput = document.getElementById('share-link');
+            
+            if (CloudSyncService.githubToken && CloudSyncService.gistId) {
+                // 生成分享链接
+                const encoded = btoa(JSON.stringify({
+                    t: CloudSyncService.githubToken,
+                    g: CloudSyncService.gistId
+                }));
+                const shareUrl = window.location.origin + window.location.pathname + '?c=' + encoded;
+                shareLinkInput.value = shareUrl;
+                shareGroup.style.display = 'block';
+            } else {
+                shareGroup.style.display = 'none';
+            }
+        }
+        
+        // 复制分享链接
+        function copyShareLink() {
+            const shareLinkInput = document.getElementById('share-link');
+            shareLinkInput.select();
+            document.execCommand('copy');
+            showNotification('🔗 配置链接已复制！在新设备打开即可自动配置', 'success');
+        }
+        
+        // 检查URL是否有配置参数
+        function checkUrlForConfig() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const configParam = urlParams.get('c');
+            
+            if (configParam) {
+                try {
+                    const config = JSON.parse(atob(configParam));
+                    if (config.t && config.g) {
+                        // 自动填入配置
+                        localStorage.setItem('github_token', config.t);
+                        localStorage.setItem('gist_id', config.g);
+                        showNotification('✅ 配置已自动导入！正在加载数据...', 'success');
+                        // 清除URL参数，避免重复处理
+                        window.history.replaceState({}, document.title, window.location.pathname);
+                        return true;
+                    }
+                } catch (e) {
+                    console.error('解析配置失败:', e);
+                }
+            }
+            return false;
         }
         
         function saveGithubConfig() {
@@ -1356,6 +1429,7 @@
             }
             
             CloudSyncService.updateSyncStatus();
+            updateShareLinkDisplay(); // 更新分享链接显示
             showNotification('设置已保存！', 'success');
             
             if (!gistId) {
